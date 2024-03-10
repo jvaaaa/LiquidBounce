@@ -18,11 +18,20 @@
  */
 package net.ccbluex.liquidbounce.utils.client
 
+import de.florianmichael.viafabricplus.protocolhack.ProtocolHack
+import de.florianmichael.viafabricplus.screen.base.ProtocolSelectionScreen
+import de.florianmichael.viafabricplus.settings.impl.VisualSettings
 import net.minecraft.SharedConstants
+import net.minecraft.client.gui.screen.TitleScreen
 import net.raphimc.vialoader.util.VersionEnum
 
 // Only runs once
 val usesViaFabricPlus = runCatching {
+    Class.forName("de.florianmichael.viafabricplus.ViaFabricPlus")
+    true
+}.getOrDefault(false)
+
+val hasProtocolHack = runCatching {
     Class.forName("de.florianmichael.viafabricplus.protocolhack.ProtocolHack")
     true
 }.getOrDefault(false)
@@ -36,15 +45,11 @@ val defaultProtocolVersion = ProtocolVersion(SharedConstants.getGameVersion().na
 val protocolVersion: ProtocolVersion
     get() = runCatching {
         // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-        if (!usesViaFabricPlus) {
+        if (!hasProtocolHack) {
             return@runCatching defaultProtocolVersion
         }
 
-        // TODO: Use ViaFabricPlus as a dependency instead of reflection
-        val clazz = Class.forName("de.florianmichael.viafabricplus.protocolhack.ProtocolHack")
-        val method = clazz.getMethod("getTargetVersion")
-        val version = method.invoke(null) as VersionEnum
-
+        val version = ProtocolHack.getTargetVersion()
         ProtocolVersion(version.protocol.name, version.protocol.version)
     }.onFailure {
         logger.error("Failed to get protocol version", it)
@@ -53,7 +58,7 @@ val protocolVersion: ProtocolVersion
 val protocolVersions: Array<ProtocolVersion>
     get() = runCatching {
         // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-        if (!usesViaFabricPlus) {
+        if (!hasProtocolHack) {
             return@runCatching arrayOf(defaultProtocolVersion)
         }
 
@@ -69,14 +74,11 @@ data class ProtocolVersion(val name: String, val version: Int)
 val isOldCombat: Boolean
     get() = runCatching {
         // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-        if (!usesViaFabricPlus) {
+        if (!hasProtocolHack) {
             return@runCatching false
         }
 
-        // TODO: Use ViaFabricPlus as a dependency instead of reflection
-        val clazz = Class.forName("de.florianmichael.viafabricplus.protocolhack.ProtocolHack")
-        val method = clazz.getMethod("getTargetVersion")
-        val version = method.invoke(null) as VersionEnum
+        val version = ProtocolHack.getTargetVersion()
 
         // Check if the version is older or equal than 1.8
         return version.isOlderThanOrEqualTo(VersionEnum.r1_8)
@@ -90,11 +92,42 @@ fun selectProtocolVersion(protocolId: Int) {
         error("ViaFabricPlus is not loaded")
     }
 
-    // TODO: Use ViaFabricPlus as a dependency instead of reflection
-    val clazz = Class.forName("de.florianmichael.viafabricplus.protocolhack.ProtocolHack")
-    val method = clazz.getMethod("setTargetVersion", VersionEnum::class.java)
-    val version = VersionEnum.fromProtocolId(protocolId)
-        ?: error("Protocol version $protocolId not found")
+    runCatching {
+        val version = VersionEnum.fromProtocolId(protocolId)
+            ?: error("Protocol version $protocolId not found")
 
-    method.invoke(null, version)
+        ProtocolHack.setTargetVersion(version)
+    }.onFailure {
+        logger.error("Failed to select protocol version", it)
+    }
+}
+
+fun openViaFabricPlusScreen() {
+    // Check if the ViaFabricPlus mod is loaded
+    if (!usesViaFabricPlus) {
+        error("ViaFabricPlus is not loaded")
+    }
+
+    runCatching {
+        ProtocolSelectionScreen.INSTANCE.open(mc.currentScreen ?: TitleScreen())
+    }.onFailure {
+        logger.error("Failed to open ViaFabricPlus screen", it)
+    }
+}
+
+fun disableConflictingVfpOptions() {
+    // Check if the ViaFabricPlus mod is loaded
+    if (!usesViaFabricPlus) {
+        return
+    }
+
+    runCatching {
+        val visualSettings = VisualSettings.global()
+
+        // 1 == off, 0 == on
+        visualSettings.enableSwordBlocking.value = 1
+        visualSettings.enableBlockHitAnimation.value = 1
+    }.onFailure {
+        logger.error("Failed to disable conflicting options", it)
+    }
 }

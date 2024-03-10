@@ -50,7 +50,9 @@ object ClientSocket {
         // Most essential events
         "toggleModule",
         "notification",
-        "altManagerUpdate",
+        "accountManagerMessage",
+        "accountManagerAddition",
+        "accountManagerLogin",
         "session",
         "splashOverlay",
         "splashProgress",
@@ -61,6 +63,10 @@ object ClientSocket {
         "targetChange",
         "gameModeChange",
         "componentsUpdate",
+        "proxyAdditionResult",
+        "proxyCheckResult",
+        "scaleFactorChange",
+        "overlayMessage",
 
         // Statistic events
         "fps",

@@ -21,24 +21,35 @@
 
 package net.ccbluex.liquidbounce.web.theme.component
 
-import net.ccbluex.liquidbounce.config.Configurable
-
-import net.ccbluex.liquidbounce.config.Value
 import net.ccbluex.liquidbounce.event.EventManager
 import net.ccbluex.liquidbounce.event.Listenable
 import net.ccbluex.liquidbounce.event.events.ComponentsUpdate
 import net.ccbluex.liquidbounce.features.module.modules.render.ModuleHud
 import net.ccbluex.liquidbounce.utils.client.logger
 import net.ccbluex.liquidbounce.web.theme.ThemeManager
+import net.ccbluex.liquidbounce.web.theme.component.types.HtmlComponent
 import net.ccbluex.liquidbounce.web.theme.component.types.IntegratedComponent
 
 var components: MutableList<Component> = mutableListOf()
+var customComponents: MutableList<Component> = mutableListOf(
+    HtmlComponent("<b>This is HTML</b>", enabled = false)
+)
 
-object ComponentOverlay : Configurable("Components", components as MutableList<Value<*>>), Listenable {
+object ComponentOverlay : Listenable {
 
     @JvmStatic
     fun isTweakEnabled(tweak: FeatureTweak) = handleEvents() && components.filterIsInstance<IntegratedComponent>()
         .any { it.enabled && it.tweaks.contains(tweak) }
+
+    @JvmStatic
+    fun getComponentWithTweak(tweak: FeatureTweak): IntegratedComponent? {
+        if (!handleEvents()) {
+            return null
+        }
+
+        return components.filterIsInstance<IntegratedComponent>()
+            .find { it.enabled && it.tweaks.contains(tweak) }
+    }
 
     fun insertComponents() {
         val componentList = ThemeManager.activeTheme.parseComponents()
@@ -50,7 +61,7 @@ object ComponentOverlay : Configurable("Components", components as MutableList<V
         logger.info("Inserted ${components.size} components")
     }
 
-    fun fireComponentsUpdate() = EventManager.callEvent(ComponentsUpdate(components))
+    fun fireComponentsUpdate() = EventManager.callEvent(ComponentsUpdate(components + customComponents))
 
     override fun parent() = ModuleHud
 

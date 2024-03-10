@@ -31,9 +31,11 @@ import net.ccbluex.liquidbounce.event.events.GameTickEvent
 import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.utils.client.logger
 import net.ccbluex.liquidbounce.utils.client.mc
+import net.ccbluex.liquidbounce.web.socket.netty.httpForbidden
 import net.ccbluex.liquidbounce.web.socket.netty.httpInternalServerError
 import net.ccbluex.liquidbounce.web.socket.netty.httpOk
 import net.ccbluex.liquidbounce.web.socket.netty.rest.RestNode
+import net.ccbluex.liquidbounce.web.socket.protocol.ResourcePolicy
 import net.ccbluex.liquidbounce.web.socket.protocol.protocolGson
 import net.minecraft.client.gui.screen.TitleScreen
 import net.minecraft.client.gui.screen.multiplayer.ConnectScreen
@@ -41,6 +43,7 @@ import net.minecraft.client.gui.screen.multiplayer.MultiplayerScreen
 import net.minecraft.client.network.MultiplayerServerListPinger
 import net.minecraft.client.network.ServerAddress
 import net.minecraft.client.network.ServerInfo
+import net.minecraft.client.network.ServerInfo.ResourcePackPolicy
 import net.minecraft.client.option.ServerList
 import net.minecraft.screen.ScreenTexts
 import net.minecraft.text.Text
@@ -103,7 +106,7 @@ object ServerListRest : Listenable {
 
             val servers = JsonArray()
             runCatching {
-                serverList.toList().forEachIndexed { index, serverInfo ->
+                serverList.toList().forEachIndexed { id, serverInfo ->
                     val json = protocolGson.toJsonTree(serverInfo)
 
                     if (!json.isJsonObject) {
@@ -112,7 +115,7 @@ object ServerListRest : Listenable {
                     }
 
                     val jsonObject = json.asJsonObject
-                    jsonObject.addProperty("index", index)
+                    jsonObject.addProperty("id", id)
                     servers.add(jsonObject)
                 }
 
@@ -136,11 +139,21 @@ object ServerListRest : Listenable {
             }
 
             put("/add") {
-                data class ServerAddRequest(val name: String, val address: String)
+                data class ServerAddRequest(val name: String, val address: String,
+                                            val resourcePackPolicy: String? = null)
                 val serverAddRequest = decode<ServerAddRequest>(it.content)
+
+                if (ServerAddress.isValid(serverAddRequest.address)) {
+                    httpForbidden("Invalid address")
+                }
 
                 val serverInfo = ServerInfo(serverAddRequest.name, serverAddRequest.address,
                     ServerInfo.ServerType.OTHER)
+                serverAddRequest.resourcePackPolicy?.let {
+                    serverInfo.resourcePackPolicy = ResourcePolicy.fromString(it)
+                        ?.toMinecraftPolicy() ?: ResourcePackPolicy.PROMPT
+                }
+
                 serverList.add(serverInfo, false)
                 serverList.saveFile()
 
@@ -148,9 +161,9 @@ object ServerListRest : Listenable {
             }
 
             delete("/remove") {
-                data class ServerRemoveRequest(val index: Int)
+                data class ServerRemoveRequest(val id: Int)
                 val serverRemoveRequest = decode<ServerRemoveRequest>(it.content)
-                val serverInfo = serverList.get(serverRemoveRequest.index)
+                val serverInfo = serverList.get(serverRemoveRequest.id)
 
                 serverList.remove(serverInfo)
                 serverList.saveFile()
@@ -159,12 +172,17 @@ object ServerListRest : Listenable {
             }
 
             put("/edit") {
-                data class ServerEditRequest(val index: Int, val name: String, val address: String)
+                data class ServerEditRequest(val id: Int, val name: String, val address: String,
+                                             val resourcePackPolicy: String? = null)
                 val serverEditRequest = decode<ServerEditRequest>(it.content)
-                val serverInfo = serverList.get(serverEditRequest.index)
+                val serverInfo = serverList.get(serverEditRequest.id)
 
                 serverInfo.name = serverEditRequest.name
                 serverInfo.address = serverEditRequest.address
+                serverEditRequest.resourcePackPolicy?.let {
+                    serverInfo.resourcePackPolicy = ResourcePolicy.fromString(it)
+                        ?.toMinecraftPolicy() ?: ResourcePackPolicy.PROMPT
+                }
                 serverList.saveFile()
 
                 httpOk(JsonObject())

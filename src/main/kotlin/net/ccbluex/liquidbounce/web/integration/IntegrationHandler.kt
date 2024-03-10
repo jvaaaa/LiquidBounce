@@ -98,7 +98,12 @@ object IntegrationHandler : Listenable {
         browserIsReady = true
     }
 
-    fun virtualOpen(theme: Theme, type: VirtualScreenType) {
+    fun virtualOpen(name: String) {
+        val type = VirtualScreenType.byName(name) ?: return
+        virtualOpen(type = type)
+    }
+
+    fun virtualOpen(theme: Theme = ThemeManager.activeTheme, type: VirtualScreenType) {
         // Check if the virtual screen is already open
         if (momentaryVirtualScreen?.type == type) {
             return
@@ -167,8 +172,7 @@ object IntegrationHandler : Listenable {
     }
 
     private fun handleScreenSituation(screen: Screen?): Boolean {
-        // Check for the Game narrator
-        if (HideAppearance.isHidingNow) {
+        if (screen !is VrScreen && HideAppearance.isHidingNow) {
             virtualClose()
             return false
         }

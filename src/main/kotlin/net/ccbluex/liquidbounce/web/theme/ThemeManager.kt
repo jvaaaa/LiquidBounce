@@ -21,6 +21,7 @@ package net.ccbluex.liquidbounce.web.theme
 
 import com.google.gson.JsonArray
 import com.google.gson.annotations.SerializedName
+import com.mojang.blaze3d.systems.RenderSystem
 import net.ccbluex.liquidbounce.config.ConfigSystem
 import net.ccbluex.liquidbounce.config.Configurable
 import net.ccbluex.liquidbounce.config.util.decode
@@ -31,6 +32,7 @@ import net.ccbluex.liquidbounce.utils.client.mc
 import net.ccbluex.liquidbounce.utils.io.extractZip
 import net.ccbluex.liquidbounce.utils.io.resource
 import net.ccbluex.liquidbounce.utils.io.resourceToString
+import net.ccbluex.liquidbounce.utils.render.refreshRate
 import net.ccbluex.liquidbounce.web.browser.BrowserManager
 import net.ccbluex.liquidbounce.web.browser.supports.tab.ITab
 import net.ccbluex.liquidbounce.web.integration.IntegrationHandler
@@ -54,8 +56,10 @@ object ThemeManager : Configurable("theme") {
     var shaderEnabled by boolean("Shader", false)
         .onChange { enabled ->
             if (enabled) {
-                activeTheme.compileShader()
-                defaultTheme.compileShader()
+                RenderSystem.recordRenderCall {
+                    activeTheme.compileShader()
+                    defaultTheme.compileShader()
+                }
             }
 
             return@onChange enabled
@@ -85,13 +89,21 @@ object ThemeManager : Configurable("theme") {
         ConfigSystem.root(this)
     }
 
+    /**
+     * Open [ITab] with the given [VirtualScreenType] and mark as static if [markAsStatic] is true.
+     * This tab will be locked to 60 FPS since it is not input aware.
+     */
     fun openImmediate(virtualScreenType: VirtualScreenType? = null, markAsStatic: Boolean = false): ITab =
-        BrowserManager.browser?.createTab(route(virtualScreenType, markAsStatic).url)
+        BrowserManager.browser?.createTab(route(virtualScreenType, markAsStatic).url, 60)
             ?: error("Browser is not initialized")
 
+    /**
+     * Open [ITab] with the given [VirtualScreenType] and mark as static if [markAsStatic] is true.
+     * This tab will be locked to the highest refresh rate since it is input aware.
+     */
     fun openInputAwareImmediate(virtualScreenType: VirtualScreenType? = null, markAsStatic: Boolean = false): ITab =
-        BrowserManager.browser?.createInputAwareTab(route(virtualScreenType, markAsStatic).url, takesInputHandler)
-            ?: error("Browser is not initialized")
+        BrowserManager.browser?.createInputAwareTab(route(virtualScreenType, markAsStatic).url, refreshRate,
+            takesInputHandler) ?: error("Browser is not initialized")
 
     fun updateImmediate(tab: ITab?, virtualScreenType: VirtualScreenType? = null, markAsStatic: Boolean = false) =
         tab?.loadUrl(route(virtualScreenType, markAsStatic).url)
@@ -148,8 +160,8 @@ object ThemeManager : Configurable("theme") {
 
 class Theme(val name: String) {
 
-    val folder = File(ThemeManager.themesFolder, name)
-    val metadata: ThemeMetadata = run {
+    private val folder = File(ThemeManager.themesFolder, name)
+    private val metadata: ThemeMetadata = run {
         val metadataFile = File(folder, "metadata.json")
         if (!metadataFile.exists()) {
             error("Theme $name does not contain a metadata file")

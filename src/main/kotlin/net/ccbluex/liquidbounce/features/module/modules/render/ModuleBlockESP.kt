@@ -25,13 +25,8 @@ import net.ccbluex.liquidbounce.event.events.WorldRenderEvent
 import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
-import net.ccbluex.liquidbounce.render.GenericColorMode
-import net.ccbluex.liquidbounce.render.GenericRainbowColorMode
-import net.ccbluex.liquidbounce.render.GenericStaticColorMode
-import net.ccbluex.liquidbounce.render.MultiColorBoxRenderer
+import net.ccbluex.liquidbounce.render.*
 import net.ccbluex.liquidbounce.render.engine.Color4b
-import net.ccbluex.liquidbounce.render.renderEnvironmentForWorld
-import net.ccbluex.liquidbounce.render.withPositionRelativeToCamera
 import net.ccbluex.liquidbounce.utils.block.AbstractBlockLocationTracker
 import net.ccbluex.liquidbounce.utils.block.ChunkScanner
 import net.ccbluex.liquidbounce.utils.block.getState
@@ -52,8 +47,10 @@ import net.minecraft.util.math.Vec3d
 object ModuleBlockESP : Module("BlockESP", Category.RENDER) {
 
     private val modes = choices("Mode", Glow, arrayOf(Box, Glow, Outline))
-    private val targets by blocks("Targets",
-        findBlocksEndingWith("_BED", "DRAGON_EGG").toHashSet()).onChange {
+    private val targets by blocks(
+        "Targets",
+        findBlocksEndingWith("_BED", "DRAGON_EGG").toHashSet()
+    ).onChange {
         if (enabled) {
             disable()
             enable()
@@ -61,20 +58,27 @@ object ModuleBlockESP : Module("BlockESP", Category.RENDER) {
         it
     }
 
-    private val colorMode = choices(
+    private val colorMode = choices<GenericColorMode<Pair<BlockPos, BlockState>>>(
         "ColorMode",
         { it.choices[0] },
-        { arrayOf(MapColorMode, GenericStaticColorMode(it, Color4b(255, 179, 72, 50)), GenericRainbowColorMode(it)) }
+        {
+            arrayOf(
+                MapColorMode(it),
+                GenericStaticColorMode(it, Color4b(255, 179, 72, 50)),
+                GenericRainbowColorMode(it)
+            )
+        }
     )
 
     private val fullBox = Box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
 
     private object Box : Choice("Box") {
-        override val parent: ChoiceConfigurable
+        override val parent: ChoiceConfigurable<Choice>
             get() = modes
 
         private val outline by boolean("Outline", true)
 
+        @Suppress("unused")
         val renderHandler = handler<WorldRenderEvent> { event ->
             val matrixStack = event.matrixStack
 
@@ -82,61 +86,75 @@ object ModuleBlockESP : Module("BlockESP", Category.RENDER) {
         }
 
         fun drawBoxMode(matrixStack: MatrixStack, drawOutline: Boolean, fullAlpha: Boolean): Boolean {
-            val colorMode = colorMode.activeChoice as GenericColorMode<Pair<BlockPos, BlockState>>
-
-            val boxRenderer = MultiColorBoxRenderer()
+            val colorMode = colorMode.activeChoice
 
             var dirty = false
 
             renderEnvironmentForWorld(matrixStack) {
                 synchronized(BlockTracker.trackedBlockMap) {
-                    for (pos in BlockTracker.trackedBlockMap.keys) {
-                        val vec3d = Vec3d(pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble())
+                    val trackedBlockMap = BlockTracker.trackedBlockMap
 
-                        val blockPos = vec3d.toBlockPos()
-                        val blockState = blockPos.getState() ?: continue
-
-                        if (blockState.isAir) {
-                            continue
-                        }
-
-                        val outlineShape = blockState.getOutlineShape(world, blockPos)
-                        val boundingBox = if (outlineShape.isEmpty) {
-                            fullBox
-                        } else {
-                            outlineShape.boundingBox
-                        }
-
-                        var color = colorMode.getColor(blockPos to blockState)
-
-                        if (fullAlpha) {
-                            color = color.alpha(255)
-                        }
-
-                        withPositionRelativeToCamera(vec3d) {
-                            boxRenderer.drawBox(
-                                this,
-                                boundingBox,
-                                faceColor = color,
-                                outlineColor = color.alpha(150).takeIf { drawOutline }
-                            )
-                        }
-
-                        dirty = true
-                    }
+                    dirty = drawInternal(this, trackedBlockMap, colorMode, fullAlpha, drawOutline)
                 }
             }
 
-            boxRenderer.draw()
+            return dirty
+        }
+
+        private fun WorldRenderEnvironment.drawInternal(
+            env: WorldRenderEnvironment,
+            blocks: MutableMap<AbstractBlockLocationTracker.TargetBlockPos, TrackedState>,
+            colorMode: GenericColorMode<Pair<BlockPos, BlockState>>,
+            fullAlpha: Boolean,
+            drawOutline: Boolean
+        ): Boolean {
+            var dirty = false
+
+            BoxRenderer.drawWith(env) {
+                for (pos in blocks.keys) {
+                    val vec3d = Vec3d(pos.x.toDouble(), pos.y.toDouble(), pos.z.toDouble())
+
+                    val blockPos = vec3d.toBlockPos()
+                    val blockState = blockPos.getState() ?: continue
+
+                    if (blockState.isAir) {
+                        continue
+                    }
+
+                    val outlineShape = blockState.getOutlineShape(world, blockPos)
+                    val boundingBox = if (outlineShape.isEmpty) {
+                        fullBox
+                    } else {
+                        outlineShape.boundingBox
+                    }
+
+                    var color = colorMode.getColor(Pair(blockPos, blockState))
+
+                    if (fullAlpha) {
+                        color = color.alpha(255)
+                    }
+
+                    withPositionRelativeToCamera(vec3d) {
+                        drawBox(
+                            boundingBox,
+                            faceColor = color,
+                            outlineColor = color.alpha(150).takeIf { drawOutline }
+                        )
+                    }
+
+                    dirty = true
+                }
+            }
 
             return dirty
         }
     }
 
     private object Glow : Choice("Glow") {
-        override val parent: ChoiceConfigurable
+        override val parent: ChoiceConfigurable<Choice>
             get() = modes
 
+        @Suppress("unused")
         val renderHandler = handler<DrawOutlinesEvent> { event ->
             if (event.type != DrawOutlinesEvent.OutlineType.MINECRAFT_GLOW) {
                 return@handler
@@ -150,9 +168,10 @@ object ModuleBlockESP : Module("BlockESP", Category.RENDER) {
     }
 
     private object Outline : Choice("Outline") {
-        override val parent: ChoiceConfigurable
+        override val parent: ChoiceConfigurable<Choice>
             get() = modes
 
+        @Suppress("unused")
         val renderHandler = handler<DrawOutlinesEvent> { event ->
             if (event.type != DrawOutlinesEvent.OutlineType.INBUILT_OUTLINE) {
                 return@handler
@@ -162,17 +181,6 @@ object ModuleBlockESP : Module("BlockESP", Category.RENDER) {
 
             if (dirty)
                 event.markDirty()
-        }
-    }
-
-    private object MapColorMode : Choice("MapColor"), GenericColorMode<Pair<BlockPos, BlockState>> {
-        override val parent: ChoiceConfigurable
-            get() = colorMode
-
-        override fun getColor(param: Pair<BlockPos, BlockState>?): Color4b {
-            val (pos, state) = param!!
-
-            return Color4b(state.getMapColor(mc.world!!, pos).color).alpha(100)
         }
     }
 

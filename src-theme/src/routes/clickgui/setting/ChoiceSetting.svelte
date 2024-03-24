@@ -1,12 +1,10 @@
 <script lang="ts">
-    import { createEventDispatcher } from "svelte";
-    import type {
-        ModuleSetting,
-        ChoiceSetting,
-    } from "../../../integration/types";
+    import {createEventDispatcher} from "svelte";
+    import type {ChoiceSetting, ModuleSetting,} from "../../../integration/types";
     import Dropdown from "./common/Dropdown.svelte";
     import ExpandArrow from "./common/ExpandArrow.svelte";
     import GenericSetting from "./common/GenericSetting.svelte";
+    import { setItem } from "../../../integration/persistent_storage";
 
     export let setting: ModuleSetting;
     export let path: string;
@@ -23,7 +21,7 @@
     $: nestedSettings = cSetting.choices[cSetting.active]
         .value as ModuleSetting[];
 
-    $: localStorage.setItem(thisPath, expanded.toString());
+    $: setItem(thisPath, expanded.toString());
 
     let skipAnimationDelay = false;
 

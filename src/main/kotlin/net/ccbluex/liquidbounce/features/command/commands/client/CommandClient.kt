@@ -43,6 +43,7 @@ import net.ccbluex.liquidbounce.web.theme.component.types.ImageComponent
 import net.ccbluex.liquidbounce.web.theme.component.types.TextComponent
 import net.minecraft.text.ClickEvent
 import net.minecraft.text.HoverEvent
+import net.minecraft.util.Util
 
 /**
  * Client Command
@@ -161,7 +162,7 @@ object CommandClient {
                     .build()
             ).handler { command, args ->
                 chat(regular("Overrides client JCEF browser..."))
-                clientJcef?.loadUrl(args[0] as String)
+                clientJcef.loadUrl(args[0] as String)
             }.build()
         ).subcommand(CommandBuilder.begin("reset")
             .handler { command, args ->
@@ -224,8 +225,16 @@ object CommandClient {
                     .verifiedBy(ParameterBuilder.STRING_VALIDATOR).required()
                     .build()
             ).handler { command, args ->
+                val name = args[0] as String
+
+                if (name.equals("default", true)) {
+                    ThemeManager.activeTheme = ThemeManager.defaultTheme
+                    chat(regular("Switching theme to default..."))
+                    return@handler
+                }
+
                 val theme = ThemeManager.themesFolder.listFiles()?.find {
-                    it.name.equals(args[0] as String, true)
+                    it.name.equals(name, true)
                 }
 
                 if (theme == null) {
@@ -233,16 +242,14 @@ object CommandClient {
                     return@handler
                 }
 
-                chat(regular("Setting theme to ${theme.name}..."))
+                chat(regular("Switching theme to ${theme.name}..."))
                 ThemeManager.activeTheme = Theme(theme.name)
             }.build()
         )
-        .subcommand(CommandBuilder.begin("unset")
-            .handler { command, args ->
-                chat(regular("Unset active theme..."))
-                ThemeManager.activeTheme = ThemeManager.defaultTheme
-            }.build()
-        )
+        .subcommand(CommandBuilder.begin("browse").handler { command, _ ->
+            Util.getOperatingSystem().open(ThemeManager.themesFolder)
+            chat(regular("Location: "), variable(ThemeManager.themesFolder.absolutePath))
+        }.build())
         .build()
 
     fun componentCommand() = CommandBuilder.begin("component")
@@ -255,8 +262,8 @@ object CommandClient {
                 }
 
                 chat(regular("Custom:"))
-                for (component in customComponents) {
-                    chat(regular("-> ${component.name}"))
+                for ((index, component) in customComponents.withIndex()) {
+                    chat(regular("-> ${component.name} (#$index}"))
                 }
             }.build()
         )
@@ -321,21 +328,20 @@ object CommandClient {
         )
         .subcommand(CommandBuilder.begin("remove")
             .parameter(
-                ParameterBuilder.begin<String>("name")
-                    .verifiedBy(ParameterBuilder.STRING_VALIDATOR).required()
+                ParameterBuilder.begin<Int>("id")
+                    .verifiedBy(ParameterBuilder.INTEGER_VALIDATOR).required()
                     .build()
             ).handler { command, args ->
-                val name = args[0] as String
-                val component = customComponents.find { it.name.equals(name, true) }
+                val index = args[0] as Int
+                val component = customComponents.getOrNull(index)
 
                 if (component == null) {
-                    chat(regular("Component not found."))
+                    chat(regular("Component ID is out of range."))
                     return@handler
                 }
 
                 customComponents -= component
                 ComponentOverlay.fireComponentsUpdate()
-
                 chat("Successfully removed component.")
             }.build()
         )

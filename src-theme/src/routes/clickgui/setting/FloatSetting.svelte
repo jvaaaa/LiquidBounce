@@ -1,12 +1,9 @@
 <script lang="ts">
     import "nouislider/dist/nouislider.css";
     import "./nouislider.scss";
-    import { createEventDispatcher, onMount } from "svelte";
+    import {createEventDispatcher, onMount} from "svelte";
     import noUiSlider, {type API} from "nouislider";
-    import type {
-        ModuleSetting,
-        FloatSetting,
-    } from "../../../integration/types";
+    import type {FloatSetting, ModuleSetting,} from "../../../integration/types";
     import ValueInput from "./common/ValueInput.svelte";
 
     export let setting: ModuleSetting;
@@ -83,6 +80,7 @@
 
     .name {
         grid-area: a;
+        font-weight: 500;
     }
 
     .value {

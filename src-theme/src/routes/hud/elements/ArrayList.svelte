@@ -1,17 +1,17 @@
 <script lang="ts">
     import {onMount} from "svelte";
-    import type { Module } from "../../../integration/types";
-    import { getModules } from "../../../integration/rest";
-    import { listen } from "../../../integration/ws";
-    import { getTextWidth } from "../../../integration/text_measurement";
-    import { flip } from "svelte/animate";
-    import { fly } from "svelte/transition";
+    import type {Module} from "../../../integration/types";
+    import {getModules} from "../../../integration/rest";
+    import {listen} from "../../../integration/ws";
+    import {getTextWidth} from "../../../integration/text_measurement";
+    import {flip} from "svelte/animate";
+    import {fly} from "svelte/transition";
 
     let enabledModules: Module[] = [];
 
     async function updateEnabledModules() {
         enabledModules = (await getModules())
-            .filter((m) => m.enabled)
+            .filter((m) => m.enabled && !m.hidden)
             .sort(
                 (a, b) =>
                     getTextWidth(b.name, "500 14px Inter") -
@@ -26,11 +26,15 @@
     listen("toggleModule", async () => {
         await updateEnabledModules();
     });
+
+    listen("refreshArrayList", async () => {
+        await updateEnabledModules();
+    });
 </script>
 
 <div class="arraylist">
     {#each enabledModules as { name } (name)}
-        <div class="module" animate:flip={{ duration: 200 }} in:fly={{ x: 50, duration: 200 }} out:fly={{ x: 50, duration: 200 }}>
+        <div class="module" animate:flip={{ duration: 200 }} in:fly={{ x: 50, duration: 200 }}>
             {name}
         </div>
     {/each}

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import {fly, fade} from "svelte/transition";
+    import {fade, fly} from "svelte/transition";
     import {createEventDispatcher} from "svelte";
 
     export let title: string;
@@ -53,7 +53,6 @@
     display: flex;
     flex-direction: column;
     border-radius: 5px;
-    overflow: hidden;
   }
 
   .title {

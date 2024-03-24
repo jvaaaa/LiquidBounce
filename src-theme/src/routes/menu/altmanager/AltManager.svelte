@@ -3,9 +3,9 @@
         getAccounts,
         loginToAccount as loginToAccountRest,
         openScreen,
+        removeAccount as restRemoveAccount,
         restoreSession,
-        setAccountFavorite,
-        removeAccount as restRemoveAccount
+        setAccountFavorite
     } from "../../../integration/rest.js";
     import BottomButtonWrapper from "../common/buttons/BottomButtonWrapper.svelte";
     import SwitchSetting from "../common/setting/SwitchSetting.svelte";
@@ -164,7 +164,8 @@
             <MenuListItem
                     image={account.avatar}
                     title={account.username}
-                    favorite={account.favorite}>
+                    favorite={account.favorite}
+                    on:dblclick={() => loginToAccount(account.id)}>
                 <svelte:fragment slot="subtitle">
                     <pre class="uuid">{account.uuid}</pre>
                 </svelte:fragment>

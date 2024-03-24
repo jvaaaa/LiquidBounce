@@ -16,6 +16,7 @@ import kotlin.math.sin
 
 
 object UIRenderer {
+
     private var isDrawingHudFramebuffer: Boolean = false
 
     val overlayFramebuffer: SimpleFramebuffer by lazy {
@@ -59,7 +60,7 @@ object UIRenderer {
     fun startUIOverlayDrawing(context: DrawContext, tickDelta: Float) {
         ItemImageAtlas.updateAtlas(context)
 
-        if (ModuleHud.blur) {
+        if (ModuleHud.isBlurable) {
             this.isDrawingHudFramebuffer = true
 
             this.overlayFramebuffer.clear(true)

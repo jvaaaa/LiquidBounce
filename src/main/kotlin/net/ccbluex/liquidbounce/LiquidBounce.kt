@@ -88,7 +88,8 @@ object LiquidBounce : Listenable {
     val clientBranch = gitInfo["git.branch"]?.toString() ?: "nextgen"
 
     /**
-     * Defines if the client is in development mode. This will enable update checking on commit time instead of semantic versioning.
+     * Defines if the client is in development mode.
+     * This will enable update checking on commit time instead of semantic versioning.
      *
      * TODO: Replace this approach with full semantic versioning.
      */
@@ -109,6 +110,7 @@ object LiquidBounce : Listenable {
     /**
      * Should be executed to start the client.
      */
+    @Suppress("unused")
     val startHandler = handler<ClientStartEvent> {
         runCatching {
             logger.info("Launching $CLIENT_NAME v$clientVersion by $CLIENT_AUTHOR")
@@ -159,12 +161,14 @@ object LiquidBounce : Listenable {
             ComponentOverlay.insertComponents()
 
             // Load config system from disk
-            ConfigSystem.load()
+            ConfigSystem.loadAll()
 
             // Netty WebSocket
             ClientSocket.start()
 
             // Initialize browser
+            logger.info("Refresh Rate: ${mc.window.refreshRate} Hz")
+
             IntegrationHandler
             BrowserManager.initBrowser()
 
@@ -252,19 +256,26 @@ object LiquidBounce : Listenable {
             }
 
             // Disable conflicting options
-            disableConflictingVfpOptions()
+            runCatching {
+                disableConflictingVfpOptions()
+            }.onSuccess {
+                logger.info("Disabled conflicting options.")
+            }
         }
     }
 
     /**
      * Should be executed to stop the client.
      */
+    @Suppress("unused")
     val shutdownHandler = handler<ClientShutdownEvent> {
         logger.info("Shutting down client...")
-        BrowserManager.shutdownBrowser()
-        ConfigSystem.storeAll()
 
+        ConfigSystem.storeAll()
         ChunkScanner.ChunkScannerThread.stopThread()
+
+        // Shutdown browser as last step
+        BrowserManager.shutdownBrowser()
     }
 
 }

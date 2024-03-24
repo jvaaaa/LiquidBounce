@@ -140,10 +140,11 @@ export interface Scoreboard {
 
 export interface PlayerData {
     username: string;
-    textures: SkinTextures;
+    uuid: string;
     selectedSlot: number;
     gameMode: string;
     health: number,
+    actualHealth: number;
     maxHealth: number;
     absorption: number;
     armor: number;
@@ -157,13 +158,6 @@ export interface PlayerData {
     offHandStack: ItemStack;
     armorItems: ItemStack[];
     scoreboard: Scoreboard;
-}
-
-export interface SkinTextures {
-    texture: string,
-    textureUrl: string,
-    capeTexture: string,
-    elytraTexture: string,
 }
 
 export interface StatusEffect {
@@ -312,4 +306,21 @@ export interface ClientInfo {
     inGame: boolean;
     viaFabricPlus: boolean;
     hasProtocolHack: boolean;
+}
+
+export interface ClientUpdate {
+    updateAvailable: boolean;
+    development: boolean;
+    commit: string;
+    newestVersion: {
+        buildId: number | undefined;
+        commitId: string | undefined;
+        branch: string | undefined;
+        clientVersion: string | undefined;
+        minecraftVersion: string | undefined;
+        release: boolean;
+        date: string;
+        message: string;
+        url: string;
+    }
 }

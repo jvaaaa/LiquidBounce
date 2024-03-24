@@ -1,18 +1,23 @@
 import { WS_BASE } from "./host";
 
-console.log("Connecting to server at: ", WS_BASE)
+console.log("Connecting to server at: ", WS_BASE);
 
 let ws: WebSocket;
 
 function connect() {
-    ws = new WebSocket(WS_BASE)
+    ws = new WebSocket(WS_BASE);
     
     ws.onopen = () => {
-        console.log("[WS] Connected to server")
+        console.log("[WS] Connected to server");
+        if (alwaysListeners["socketReady"]) {
+            for (const h of alwaysListeners["socketReady"]) {
+                h();
+            }
+        }
     };
 
     ws.onclose = () => {
-        console.log("[WS] Disconnected from server, attempting to reconnect...")
+        console.log("[WS] Disconnected from server, attempting to reconnect...");
         setTimeout(() => {
             connect();
         }, 1000);
@@ -41,24 +46,24 @@ function connect() {
     }
 }
 
-const alwaysListeners: {[name: string]: Function[]} = {}
-let listeners: {[name: string]: Function[]}  = {}
+const alwaysListeners: {[name: string]: Function[]} = {};
+let listeners: {[name: string]: Function[]}  = {};
 
 export function listenAlways(eventName: string, callback: Function) {
-    if (!alwaysListeners[eventName]) alwaysListeners[eventName] = []
+    if (!alwaysListeners[eventName]) alwaysListeners[eventName] = [];
 
     alwaysListeners[eventName].push(callback)
 }
 
 export function listen(eventName: string, callback: Function) {
-    if (!listeners[eventName]) listeners[eventName] = []
+    if (!listeners[eventName]) listeners[eventName] = [];
 
     listeners[eventName].push(callback)
 }
 
 export function cleanupListeners() {
-    console.log("Cleanup")
-    listeners = {}
+    listeners = {};
+    console.log("[WS] Cleaned up event listeners");
 }
 
 export function deleteListener(eventName: string, cb: Function) {
@@ -74,6 +79,6 @@ setInterval(() => {
         name: "ping",
         event: {}
     }));
-}, 5000)
+}, 5000);
 
 connect();

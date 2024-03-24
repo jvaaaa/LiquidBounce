@@ -24,14 +24,8 @@ import net.ccbluex.liquidbounce.event.events.WorldRenderEvent
 import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
-import net.ccbluex.liquidbounce.render.GenericColorMode
-import net.ccbluex.liquidbounce.render.GenericRainbowColorMode
-import net.ccbluex.liquidbounce.render.GenericStaticColorMode
-import net.ccbluex.liquidbounce.render.SingleColorBoxRenderer
+import net.ccbluex.liquidbounce.render.*
 import net.ccbluex.liquidbounce.render.engine.Color4b
-import net.ccbluex.liquidbounce.render.renderEnvironmentForWorld
-import net.ccbluex.liquidbounce.render.utils.rainbow
-import net.ccbluex.liquidbounce.render.withPositionRelativeToCamera
 import net.ccbluex.liquidbounce.utils.entity.interpolateCurrentPosition
 import net.minecraft.entity.Entity
 import net.minecraft.entity.ItemEntity
@@ -51,7 +45,7 @@ object ModuleItemESP : Module("ItemESP", Category.RENDER) {
 
 
     private val modes = choices("Mode", OutlineMode, arrayOf(GlowMode, OutlineMode, BoxMode))
-    private val colorMode = choices(
+    private val colorMode = choices<GenericColorMode<Any?>>(
         "ColorMode",
         { it.choices[0] },
         { arrayOf(GenericStaticColorMode(it, Color4b(255, 179, 72, 255)), GenericRainbowColorMode(it)) }
@@ -59,11 +53,12 @@ object ModuleItemESP : Module("ItemESP", Category.RENDER) {
 
     private object BoxMode : Choice("Box") {
 
-        override val parent: ChoiceConfigurable
+        override val parent: ChoiceConfigurable<Choice>
             get() = modes
 
         private val box = Box(-0.125, 0.125, -0.125, 0.125, 0.375, 0.125)
 
+        @Suppress("unused")
         val renderHandler = handler<WorldRenderEvent> { event ->
             val matrixStack = event.matrixStack
 
@@ -73,33 +68,31 @@ object ModuleItemESP : Module("ItemESP", Category.RENDER) {
 
             val filtered = world.entities.filter(::shouldRender)
 
-            val boxRenderer = SingleColorBoxRenderer()
-
             renderEnvironmentForWorld(matrixStack) {
-                for (entity in filtered) {
-                    val pos = entity.interpolateCurrentPosition(event.partialTicks)
+                BoxRenderer.drawWith(this) {
+                    for (entity in filtered) {
+                        val pos = entity.interpolateCurrentPosition(event.partialTicks)
 
-                    withPositionRelativeToCamera(pos) {
-                        boxRenderer.drawBox(this, box, true)
+                        withPositionRelativeToCamera(pos) {
+                            drawBox(box, baseColor, outlineColor)
+                        }
                     }
                 }
-
-                boxRenderer.draw(this, baseColor, outlineColor)
             }
         }
     }
 
     object GlowMode : Choice("Glow") {
-        override val parent: ChoiceConfigurable
+        override val parent: ChoiceConfigurable<Choice>
             get() = modes
     }
 
     object OutlineMode : Choice("Outline") {
-        override val parent: ChoiceConfigurable
+        override val parent: ChoiceConfigurable<Choice>
             get() = modes
     }
 
     fun shouldRender(it: Entity?) = it is ItemEntity || it is ArrowEntity
 
-    fun getColor() = (this.colorMode.activeChoice as GenericColorMode<Nothing>).getColor()
+    fun getColor() = this.colorMode.activeChoice.getColor(null)
 }

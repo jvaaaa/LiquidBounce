@@ -26,28 +26,22 @@ import net.ccbluex.liquidbounce.event.handler
 import net.ccbluex.liquidbounce.features.module.Category
 import net.ccbluex.liquidbounce.features.module.Module
 import net.ccbluex.liquidbounce.features.module.modules.player.chestStealer.features.FeatureChestAura
-import net.ccbluex.liquidbounce.render.MultiColorBoxRenderer
-import net.ccbluex.liquidbounce.render.SingleColorBoxRenderer
+import net.ccbluex.liquidbounce.render.BoxRenderer
 import net.ccbluex.liquidbounce.render.engine.Color4b
-import net.ccbluex.liquidbounce.render.engine.Vec3
 import net.ccbluex.liquidbounce.render.renderEnvironmentForWorld
 import net.ccbluex.liquidbounce.render.withPosition
+import net.ccbluex.liquidbounce.render.withPositionRelativeToCamera
 import net.ccbluex.liquidbounce.utils.block.Region
 import net.ccbluex.liquidbounce.utils.block.WorldChangeNotifier
 import net.ccbluex.liquidbounce.utils.block.getState
 import net.ccbluex.liquidbounce.utils.entity.interpolateCurrentPosition
-import net.ccbluex.liquidbounce.utils.math.toVec3
+import net.ccbluex.liquidbounce.utils.math.toVec3d
 import net.minecraft.block.BlockRenderType
-import net.minecraft.block.entity.AbstractFurnaceBlockEntity
-import net.minecraft.block.entity.BarrelBlockEntity
-import net.minecraft.block.entity.BlockEntity
-import net.minecraft.block.entity.ChestBlockEntity
-import net.minecraft.block.entity.DispenserBlockEntity
-import net.minecraft.block.entity.EnderChestBlockEntity
-import net.minecraft.block.entity.HopperBlockEntity
-import net.minecraft.block.entity.ShulkerBoxBlockEntity
+import net.minecraft.block.entity.*
 import net.minecraft.entity.Entity
+import net.minecraft.entity.passive.AbstractDonkeyEntity
 import net.minecraft.entity.vehicle.ChestBoatEntity
+import net.minecraft.entity.vehicle.HopperMinecartEntity
 import net.minecraft.entity.vehicle.StorageMinecartEntity
 import net.minecraft.util.math.BlockPos
 import net.minecraft.util.math.Box
@@ -63,12 +57,12 @@ import java.util.concurrent.ConcurrentHashMap
 
 object ModuleStorageESP : Module("StorageESP", Category.RENDER) {
 
-    private val modes = choices("Mode", Glow, arrayOf(Box, Glow))
+    private val modes = choices("Mode", Glow, arrayOf(BoxMode, Glow))
 
-    private val chestColor by color("Chest", Color4b(16, 71, 92))
+    private val chestColor by color("Chest", Color4b(0, 100, 255))
     private val enderChestColor by color("EnderChest", Color4b(Color.MAGENTA))
-    private val furnaceColor by color("Furnace", Color4b(Color.BLACK))
-    private val dispenserColor by color("Dispenser", Color4b(Color.BLACK))
+    private val furnaceColor by color("Furnace", Color4b(79, 79, 79))
+    private val dispenserColor by color("Dispenser", Color4b(Color.LIGHT_GRAY))
     private val hopperColor by color("Hopper", Color4b(Color.GRAY))
     private val shulkerColor by color("ShulkerBox", Color4b(Color(0x6e, 0x4d, 0x6e).brighter()))
 
@@ -80,86 +74,82 @@ object ModuleStorageESP : Module("StorageESP", Category.RENDER) {
 
     private val FULL_BOX = Box(0.0, 0.0, 0.0, 1.0, 1.0, 1.0)
 
-    private object Box : Choice("Box") {
+    private object BoxMode : Choice("Box") {
 
-        override val parent: ChoiceConfigurable
+        override val parent: ChoiceConfigurable<Choice>
             get() = modes
 
         private val outline by boolean("Outline", true)
 
+        @Suppress("unused")
         val renderHandler = handler<WorldRenderEvent> { event ->
             val matrixStack = event.matrixStack
-            val blocksToRender =
-                locations.entries
-                    .filter { (pos, type) -> type.color().a > 0 && type.shouldRender(pos) }
-                    .groupBy { it.value }
 
-            val entitiesToRender =
-                world.entities
-                    .filter { categorizeEntity(it) != null }
-                    .groupBy { categorizeEntity(it)!! }
+            val queuedBoxes = collectBoxesToDraw(event)
 
             renderEnvironmentForWorld(matrixStack) {
-                for ((type, blocks) in blocksToRender) {
-                    val boxRenderer = SingleColorBoxRenderer()
+                BoxRenderer.drawWith(this) {
+                    for ((pos, box, color) in queuedBoxes) {
+                        val baseColor = color.alpha(50)
+                        val outlineColor = color.alpha(100)
 
-                    val color = type.color()
-                    val baseColor = color.alpha(50)
-                    val outlineColor = color.alpha(100)
-
-                    for ((pos, _) in blocks) {
-                        val vec3 = Vec3(pos)
-                        val state = pos.getState() ?: continue
-
-                        if (state.isAir) {
-                            continue
-                        }
-
-                        val outlineShape = state.getOutlineShape(world, pos)
-                        val boundingBox = if (outlineShape.isEmpty) {
-                            FULL_BOX
-                        } else {
-                            outlineShape.boundingBox
-                        }
-
-                        withPosition(relativeToCamera(Vec3d.of(pos))) {
-                            boxRenderer.drawBox(this, boundingBox, outline)
+                        withPositionRelativeToCamera(pos) {
+                            drawBox(box, baseColor, outlineColor.takeIf { outline })
                         }
                     }
-
-                    boxRenderer.draw(this, baseColor, outlineColor)
-                }
-
-                for ((type, entities) in entitiesToRender) {
-                    val boxRenderer = SingleColorBoxRenderer()
-
-                    val color = type.color()
-                    val baseColor = color.alpha(50)
-                    val outlineColor = color.alpha(100)
-
-                    for (entity in entities) {
-                        val vec3 = entity.interpolateCurrentPosition(event.partialTicks).toVec3()
-                        val dimensions = entity.getDimensions(entity.pose)
-                        val d = dimensions.width.toDouble() / 2.0
-                        val box = Box(-d, 0.0, -d, d, dimensions.height.toDouble(), d).expand(0.05)
-
-                        withPosition(vec3) {
-                            boxRenderer.drawBox(this, box, outline)
-                        }
-                    }
-
-                    boxRenderer.draw(this, baseColor, outlineColor)
                 }
             }
+        }
+
+        private fun collectBoxesToDraw(event: WorldRenderEvent): MutableList<Triple<Vec3d, Box, Color4b>> {
+            val queuedBoxes = mutableListOf<Triple<Vec3d, Box, Color4b>>()
+
+            for ((pos, type) in locations.entries) {
+                val color = type.color()
+
+                if (color.a <= 0 || !type.shouldRender(pos)) {
+                    continue
+                }
+
+                val state = pos.getState()
+
+                if (state == null || state.isAir) {
+                    continue
+                }
+
+                val outlineShape = state.getOutlineShape(world, pos)
+                val boundingBox = if (outlineShape.isEmpty) {
+                    FULL_BOX
+                } else {
+                    outlineShape.boundingBox
+                }
+
+                queuedBoxes.add(Triple(pos.toVec3d(), boundingBox, color))
+            }
+
+            for (entity in world.entities) {
+                val type = categorizeEntity(entity) ?: continue
+
+                val pos = entity.interpolateCurrentPosition(event.partialTicks)
+
+                val dimensions = entity.getDimensions(entity.pose)
+                val d = dimensions.width.toDouble() / 2.0
+                val box = Box(-d, 0.0, -d, d, dimensions.height.toDouble(), d).expand(0.05)
+
+                queuedBoxes.add(Triple(pos, box, type.color()))
+            }
+            return queuedBoxes
+
         }
 
     }
 
     object Glow : Choice("Glow") {
 
-        override val parent: ChoiceConfigurable
+        override val parent: ChoiceConfigurable<Choice>
             get() = modes
 
+        @Suppress("unused")
         val glowRenderHandler = handler<DrawOutlinesEvent> { event ->
             if (event.type != DrawOutlinesEvent.OutlineType.MINECRAFT_GLOW) {
                 return@handler
@@ -171,47 +161,47 @@ object ModuleStorageESP : Module("StorageESP", Category.RENDER) {
             if (positions.isEmpty())
                 return@handler
 
-            val boxRenderer = MultiColorBoxRenderer()
-
             renderEnvironmentForWorld(event.matrixStack) {
-                for ((pos, type) in positions) {
-                    val state = pos.getState() ?: continue
+                BoxRenderer.drawWith(this) {
+                    for ((pos, type) in positions) {
+                        val state = pos.getState() ?: continue
 
-                    // non-model blocks are already processed by WorldRenderer where we injected code which renders
-                    // their outline
-                    if (state.renderType != BlockRenderType.MODEL) {
-                        continue
+                        // non-model blocks are already processed by WorldRenderer where we injected code which renders
+                        // their outline
+                        if (state.renderType != BlockRenderType.MODEL) {
+                            continue
+                        }
+
+                        if (state.isAir) {
+                            continue
+                        }
+
+                        val outlineShape = state.getOutlineShape(world, pos)
+
+                        val boundingBox = if (outlineShape.isEmpty) {
+                            FULL_BOX
+                        } else {
+                            outlineShape.boundingBox
+                        }
+
+                        withPosition(relativeToCamera(Vec3d.of(pos))) {
+                            drawBox(boundingBox, type.color())
+                        }
+
+                        event.markDirty()
                     }
-
-                    if (state.isAir) {
-                        continue
-                    }
-
-                    val outlineShape = state.getOutlineShape(world, pos)
-
-                    val boundingBox = if (outlineShape.isEmpty) {
-                        FULL_BOX
-                    } else {
-                        outlineShape.boundingBox
-                    }
-
-                    withPosition(relativeToCamera(Vec3d.of(pos))) {
-                        boxRenderer.drawBox(this, boundingBox, type.color())
-                    }
-
-                    event.markDirty()
                 }
             }
-
-            boxRenderer.draw()
         }
     }
 
     fun categorizeEntity(entity: Entity): ChestType? {
         return when (entity) {
             // This includes any storage type minecart entity including ChestMinecartEntity
+            is HopperMinecartEntity -> ChestType.HOPPER
             is StorageMinecartEntity -> ChestType.CHEST
             is ChestBoatEntity -> ChestType.CHEST
+            is AbstractDonkeyEntity -> if (entity.hasChest()) ChestType.CHEST else null
             else -> null
         }
     }

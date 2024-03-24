@@ -2,7 +2,7 @@
     import Router, {push} from "svelte-spa-router";
     import ClickGui from "./routes/clickgui/ClickGui.svelte";
     import Hud from "./routes/hud/Hud.svelte";
-    import {confirmVirtualScreen, getVirtualScreen} from "./integration/rest";
+    import {getVirtualScreen} from "./integration/rest";
     import {cleanupListeners, listenAlways} from "./integration/ws";
     import {onMount} from "svelte";
     import {insertPersistentData} from "./integration/persistent_storage";
@@ -35,11 +35,14 @@
     const isStatic = staticTag === "static";
     let showSplash = false;
 
-    async function changeRoute(name: string) {
-        console.log(`[Router] Redirecting to ${name}`);
-        await confirmVirtualScreen(name);
+    // HACK: Just in case
+    setTimeout(() => {
+       showSplash = false;
+    }, 10 * 1000);
 
+    async function changeRoute(name: string) {
         cleanupListeners();
+        console.log(`[Router] Redirecting to ${name}`);
         await push(`/${name}`);
     }
 
@@ -50,12 +53,22 @@
             return;
         }
 
+        listenAlways("socketReady", async () => {
+            const virtualScreen = await getVirtualScreen();
+            showSplash = virtualScreen.showingSplash;
+            await changeRoute(virtualScreen.name || "none");
+        });
+
         listenAlways("splashOverlay", async (event: any) => {
             showSplash = event.showingSplash;
+            if (!showSplash) {
+                // Dirty fix to patch lagging browser after launch.
+                window.location.replace(window.location.href.split("#").shift()!);
+            }
         });
 
         listenAlways("virtualScreen", async (event: any) => {
-            console.log(`[Router] Virtual screen change to ${event.screenName}`)
+            console.log(`[Router] Virtual screen change to ${event.screenName}`);
             const action = event.action;
 
             switch (action) {
@@ -69,8 +82,8 @@
         });
 
         const virtualScreen = await getVirtualScreen();
-        await changeRoute(virtualScreen.name || "none");
         showSplash = virtualScreen.showingSplash;
+        await changeRoute(virtualScreen.name || "none");
     });
 </script>
 

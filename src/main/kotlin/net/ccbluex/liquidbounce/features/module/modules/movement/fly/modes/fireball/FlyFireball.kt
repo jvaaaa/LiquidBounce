@@ -36,7 +36,7 @@ import net.minecraft.util.Hand
 
 internal object FlyFireball : Choice("Fireball") {
 
-    override val parent: ChoiceConfigurable
+    override val parent: ChoiceConfigurable<*>
         get() = ModuleFly.modes
 
     val technique = choices("Technique", FlyFireballLegitTechnique,
@@ -69,6 +69,7 @@ internal object FlyFireball : Choice("Fireball") {
         interactItem(Hand.MAIN_HAND)
     }
 
+    @Suppress("unused")
     val handleSilentFireballSelection = repeatable {
         if (AutoFireball.enabled) {
             val bestMainHandSlot = findFireballSlot()

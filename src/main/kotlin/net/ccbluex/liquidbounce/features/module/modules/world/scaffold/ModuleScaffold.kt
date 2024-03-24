@@ -18,6 +18,7 @@
  */
 package net.ccbluex.liquidbounce.features.module.modules.world.scaffold
 
+import net.ccbluex.liquidbounce.config.Choice
 import net.ccbluex.liquidbounce.config.NamedChoice
 import net.ccbluex.liquidbounce.config.NoneChoice
 import net.ccbluex.liquidbounce.config.ToggleableConfigurable
@@ -32,13 +33,7 @@ import net.ccbluex.liquidbounce.features.module.modules.movement.ModuleSafeWalk
 import net.ccbluex.liquidbounce.features.module.modules.player.invcleaner.ModuleInventoryCleaner
 import net.ccbluex.liquidbounce.features.module.modules.player.nofall.modes.NoFallBlink
 import net.ccbluex.liquidbounce.features.module.modules.render.ModuleDebug
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features.ScaffoldAutoJumpFeature
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features.ScaffoldBreezilyFeature
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features.ScaffoldDownFeature
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features.ScaffoldGodBridgeFeature
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features.ScaffoldSlowFeature
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features.ScaffoldSpeedLimiterFeature
-import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features.ScaffoldStabilizeMovementFeature
+import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features.*
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.techniques.ScaffoldEagleTechnique
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.techniques.ScaffoldNormalTechnique
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.techniques.ScaffoldTellyTechnique
@@ -49,50 +44,26 @@ import net.ccbluex.liquidbounce.utils.aiming.RotationManager
 import net.ccbluex.liquidbounce.utils.aiming.RotationsConfigurable
 import net.ccbluex.liquidbounce.utils.aiming.raycast
 import net.ccbluex.liquidbounce.utils.block.doPlacement
-import net.ccbluex.liquidbounce.utils.block.targetFinding.AimMode
-import net.ccbluex.liquidbounce.utils.block.targetFinding.BlockPlacementTarget
-import net.ccbluex.liquidbounce.utils.block.targetFinding.BlockPlacementTargetFindingOptions
-import net.ccbluex.liquidbounce.utils.block.targetFinding.CenterTargetPositionFactory
-import net.ccbluex.liquidbounce.utils.block.targetFinding.FaceTargetPositionFactory
-import net.ccbluex.liquidbounce.utils.block.targetFinding.NearestRotationTargetPositionFactory
-import net.ccbluex.liquidbounce.utils.block.targetFinding.PositionFactoryConfiguration
-import net.ccbluex.liquidbounce.utils.block.targetFinding.RandomTargetPositionFactory
-import net.ccbluex.liquidbounce.utils.block.targetFinding.StabilizedRotationTargetPositionFactory
-import net.ccbluex.liquidbounce.utils.block.targetFinding.findBestBlockPlacementTarget
+import net.ccbluex.liquidbounce.utils.block.targetFinding.*
 import net.ccbluex.liquidbounce.utils.client.SilentHotbar
 import net.ccbluex.liquidbounce.utils.client.Timer
 import net.ccbluex.liquidbounce.utils.combat.ClickScheduler
 import net.ccbluex.liquidbounce.utils.entity.eyes
-import net.ccbluex.liquidbounce.utils.entity.isCloseToEdge
 import net.ccbluex.liquidbounce.utils.entity.moving
-import net.ccbluex.liquidbounce.utils.item.DISALLOWED_BLOCKS_TO_PLACE
-import net.ccbluex.liquidbounce.utils.item.PreferAverageHardBlocks
-import net.ccbluex.liquidbounce.utils.item.PreferFavourableBlocks
-import net.ccbluex.liquidbounce.utils.item.PreferFullCubeBlocks
-import net.ccbluex.liquidbounce.utils.item.PreferSolidBlocks
-import net.ccbluex.liquidbounce.utils.item.PreferStackSize
-import net.ccbluex.liquidbounce.utils.item.PreferWalkableBlocks
-import net.ccbluex.liquidbounce.utils.item.UNFAVORABLE_BLOCKS_TO_PLACE
+import net.ccbluex.liquidbounce.utils.item.*
 import net.ccbluex.liquidbounce.utils.kotlin.EventPriorityConvention
 import net.ccbluex.liquidbounce.utils.kotlin.Priority
 import net.ccbluex.liquidbounce.utils.math.geometry.Line
 import net.ccbluex.liquidbounce.utils.math.minus
-import net.ccbluex.liquidbounce.utils.math.plus
-import net.ccbluex.liquidbounce.utils.math.times
 import net.ccbluex.liquidbounce.utils.math.toBlockPos
 import net.ccbluex.liquidbounce.utils.math.toVec3d
 import net.ccbluex.liquidbounce.utils.movement.DirectionalInput
-import net.ccbluex.liquidbounce.utils.movement.findEdgeCollision
 import net.ccbluex.liquidbounce.utils.sorting.ComparatorChain
 import net.minecraft.block.BlockWithEntity
 import net.minecraft.block.FallingBlock
 import net.minecraft.block.SideShapeType
 import net.minecraft.entity.EntityPose
-import net.minecraft.item.BlockItem
-import net.minecraft.item.ItemPlacementContext
-import net.minecraft.item.ItemStack
-import net.minecraft.item.ItemUsageContext
-import net.minecraft.item.Items
+import net.minecraft.item.*
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket.Full
 import net.minecraft.util.Hand
 import net.minecraft.util.hit.BlockHitResult
@@ -138,19 +109,20 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
     )
 
     init {
+        tree(ScaffoldMovementPrediction)
         tree(ScaffoldAutoJumpFeature)
         tree(ScaffoldBreezilyFeature)
     }
 
     @Suppress("UnusedPrivateProperty")
-    val towerMode = choices("Tower", {
+    val towerMode = choices<Choice>("Tower", {
         it.choices[0] // None
     }) {
         arrayOf(NoneChoice(it), ScaffoldTowerMotion, ScaffoldTowerPulldown)
     }
 
     // SafeWalk feature - uses the SafeWalk module as a base
-    @Suppress("UnusedPrivateProperty")
+    @Suppress("unused")
     private val safeWalkMode = choices("SafeWalk", {
         it.choices[1] // Safe mode
     }, ModuleSafeWalk::createChoices)
@@ -168,7 +140,7 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
     private val NORMAL_INVESTIGATION_OFFSETS: List<Vec3i> = commonOffsetToInvestigate(listOf(0, -1, 1))
 
     object Swing : ToggleableConfigurable(this, "Swing", true) {
-        val swingSilent by boolean("Silent", false);
+        val swingSilent by boolean("Silent", false)
     }
 
     init {
@@ -216,6 +188,7 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
         placementY = player.blockPos.y - 1
 
         ScaffoldMovementPlanner.reset()
+        ScaffoldMovementPrediction.reset()
 
         super.enable()
     }
@@ -226,12 +199,14 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
         SilentHotbar.resetSlot(this)
     }
 
-    private val afterJumpEvent = handler<PlayerAfterJumpEvent>(priority = EventPriorityConvention.SAFETY_FEATURE) {
+    @Suppress("unused")
+    val afterJumpEvent = handler<PlayerAfterJumpEvent>(priority = EventPriorityConvention.SAFETY_FEATURE) {
         randomization = Random.nextDouble(-0.01, 0.01)
         placementY = player.blockPos.y - if (mc.options.jumpKey.isPressed) 0 else 1
     }
 
-    private val rotationUpdateHandler = handler<SimulatedTickEvent> {
+    @Suppress("unused")
+    val rotationUpdateHandler = handler<SimulatedTickEvent> {
         NoFallBlink.waitUntilGround = true
 
         val blockInHotbar = findBestValidHotbarSlotForTarget()
@@ -244,7 +219,7 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
 
         val optimalLine = this.currentOptimalLine
 
-        val predictedPos = getPredictedPlacementPos() ?: player.pos
+        val predictedPos = ScaffoldMovementPrediction.getPredictedPlacementPos(optimalLine) ?: player.pos
         // Check if the player is probably going to sneak at the predicted position
         val predictedPose =
             if (ScaffoldEagleTechnique.isActive && ScaffoldEagleTechnique.shouldEagle(DirectionalInput(player.input))) {
@@ -267,7 +242,7 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
         }
 
         // Face position factory for current config
-        val facePositionFactory = getFacePositionFactoryForConfig()
+        val facePositionFactory = getFacePositionFactoryForConfig(predictedPos, predictedPose)
 
         val searchOptions =
             BlockPlacementTargetFindingOptions(
@@ -318,45 +293,9 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
         }
     }
 
-    /**
-     * Calculates where the player will stand when he places the block. Useful for rotations
-     *
-     * @return the predicted pos or `null` if the prediction failed
-     */
-    private fun getPredictedPlacementPos(): Vec3d? {
-        val optimalLine = this.currentOptimalLine ?: return null
-
-        val optimalEdgeDist = 0.0
-
-        // When we are close to the edge, we are able to place right now. Thus, we don't want to use a future position
-        if (player.isCloseToEdge(DirectionalInput(player.input), distance = optimalEdgeDist))
-            return null
-
-        // TODO Check if the player is moving away from the line and implement another prediction method for that case
-
-        val nearestPosToPlayer = optimalLine.getNearestPointTo(player.pos)
-
-        val fromLine = nearestPosToPlayer + Vec3d(0.0, -0.1, 0.0)
-        val toLine = fromLine + optimalLine.direction.normalize().multiply(3.0)
-
-        val edgeCollision = findEdgeCollision(fromLine, toLine)
-
-        // The next placement point is far in the future. Don't predict for now
-        if (edgeCollision == null)
-            return null
-
-        val fallOffPoint = Vec3d(edgeCollision.x, player.pos.y, edgeCollision.z)
-        val fallOffPointToPlayer = fallOffPoint - player.pos
-
-        // Move the point where we want to place a bit more to the player since we ideally want to place at an edge
-        // distance of 0.2 or so
-        val vec3d = fallOffPoint - fallOffPointToPlayer.normalize() * optimalEdgeDist
-
-        return vec3d
-    }
-
     var currentOptimalLine: Line? = null
 
+    @Suppress("unused")
     val moveEvent = handler<MovementInputEvent> { event ->
         this.currentOptimalLine = null
 
@@ -371,9 +310,9 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
         ScaffoldBreezilyFeature.doBreezilyIfNeeded(event)
     }
 
-    fun getFacePositionFactoryForConfig(): FaceTargetPositionFactory {
+    fun getFacePositionFactoryForConfig(predictedPos: Vec3d, predictedPose: EntityPose): FaceTargetPositionFactory {
         val config = PositionFactoryConfiguration(
-            player.eyes,
+            predictedPos.add(0.0, player.getEyeHeight(predictedPose).toDouble(), 0.0),
             randomization,
         )
 
@@ -385,12 +324,14 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
         }
     }
 
+    @Suppress("unused")
     val timerHandler = repeatable {
         if (timer != 1f) {
             Timer.requestTimerSpeed(timer, Priority.IMPORTANT_FOR_USAGE_1, this@ModuleScaffold)
         }
     }
 
+    @Suppress("unused")
     val networkTickHandler = repeatable {
         val target = currentTarget
 
@@ -467,6 +408,9 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
             )
         }
 
+        // Take the fall off position before placing the block
+        val previousFallOffPos = currentOptimalLine?.let { l -> ScaffoldMovementPrediction.getFallOffPositionOnLine(l) }
+
         doPlacement(currentCrosshairTarget, handToInteractWith, Swing.swingSilent, {
             ScaffoldMovementPlanner.trackPlacedBlock(target)
             ScaffoldEagleTechnique.onBlockPlacement()
@@ -484,6 +428,8 @@ object ModuleScaffold : Module("Scaffold", Category.WORLD) {
         }
 
         if (wasSuccessful) {
+            ScaffoldMovementPrediction.onPlace(currentOptimalLine, previousFallOffPos)
+
             waitTicks(currentDelay)
         }
     }

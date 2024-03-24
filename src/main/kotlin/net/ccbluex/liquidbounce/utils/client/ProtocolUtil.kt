@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015 - 2024 CCBlueX
+ * Copyright (c) 2015-2024 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,15 +15,14 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with LiquidBounce. If not, see <https://www.gnu.org/licenses/>.
+ *
+ *
  */
 package net.ccbluex.liquidbounce.utils.client
 
-import de.florianmichael.viafabricplus.protocolhack.ProtocolHack
-import de.florianmichael.viafabricplus.screen.base.ProtocolSelectionScreen
-import de.florianmichael.viafabricplus.settings.impl.VisualSettings
+import net.ccbluex.liquidbounce.utils.client.vfp.Vfp306Compatibility
+import net.ccbluex.liquidbounce.utils.client.vfp.VfpCompatibility
 import net.minecraft.SharedConstants
-import net.minecraft.client.gui.screen.TitleScreen
-import net.raphimc.vialoader.util.VersionEnum
 
 // Only runs once
 val usesViaFabricPlus = runCatching {
@@ -36,98 +35,95 @@ val hasProtocolHack = runCatching {
     true
 }.getOrDefault(false)
 
+val hasProtocolTranslator = runCatching {
+    Class.forName("de.florianmichael.viafabricplus.protocoltranslator.ProtocolTranslator")
+    true
+}.getOrDefault(false)
+
+val hasVisualSettings = runCatching {
+    Class.forName("de.florianmichael.viafabricplus.settings.impl.VisualSettings")
+    true
+}.getOrDefault(false)
+
 /**
  * Both 1.20.3 and 1.20.4 use protocol 765, so we can use this as a default
  */
-val defaultProtocolVersion = ProtocolVersion(SharedConstants.getGameVersion().name,
+val defaultProtocolVersion = ClientProtocolVersion(SharedConstants.getGameVersion().name,
     SharedConstants.getGameVersion().protocolVersion)
 
-val protocolVersion: ProtocolVersion
+val protocolVersion: ClientProtocolVersion
     get() = runCatching {
         // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-        if (!hasProtocolHack) {
+        if (hasProtocolTranslator) {
+            return@runCatching VfpCompatibility.INSTANCE.unsafeGetProtocolVersion()
+        } else if (hasProtocolHack) {
+            return@runCatching Vfp306Compatibility.INSTANCE.unsafeGetProtocolVersion()
+        } else {
             return@runCatching defaultProtocolVersion
         }
-
-        val version = ProtocolHack.getTargetVersion()
-        ProtocolVersion(version.protocol.name, version.protocol.version)
     }.onFailure {
         logger.error("Failed to get protocol version", it)
     }.getOrDefault(defaultProtocolVersion)
 
-val protocolVersions: Array<ProtocolVersion>
+val protocolVersions: Array<ClientProtocolVersion>
     get() = runCatching {
         // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-        if (!hasProtocolHack) {
+        if (hasProtocolTranslator) {
+            return@runCatching VfpCompatibility.INSTANCE.unsafeGetProtocolVersions()
+        } else if (hasProtocolHack) {
+            return@runCatching Vfp306Compatibility.INSTANCE.unsafeGetProtocolVersions()
+        } else {
             return@runCatching arrayOf(defaultProtocolVersion)
         }
-
-        VersionEnum.SORTED_VERSIONS.map { version ->
-            ProtocolVersion(version.protocol.name, version.protocol.version)
-        }.toTypedArray()
     }.onFailure {
         logger.error("Failed to get protocol version", it)
     }.getOrDefault(arrayOf(defaultProtocolVersion))
 
-data class ProtocolVersion(val name: String, val version: Int)
+data class ClientProtocolVersion(val name: String, val version: Int)
 
 val isOldCombat: Boolean
     get() = runCatching {
         // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-        if (!hasProtocolHack) {
+        if (hasProtocolTranslator) {
+            return@runCatching VfpCompatibility.INSTANCE.isOldCombat
+        } else if (hasProtocolHack) {
+            return@runCatching Vfp306Compatibility.INSTANCE.isOldCombat
+        } else {
             return@runCatching false
         }
-
-        val version = ProtocolHack.getTargetVersion()
-
-        // Check if the version is older or equal than 1.8
-        return version.isOlderThanOrEqualTo(VersionEnum.r1_8)
     }.onFailure {
         logger.error("Failed to check if the server is using old combat", it)
     }.getOrDefault(false)
 
+
+
 fun selectProtocolVersion(protocolId: Int) {
     // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-    if (!usesViaFabricPlus) {
+    if (hasProtocolTranslator) {
+        VfpCompatibility.INSTANCE.unsafeSelectProtocolVersion(protocolId)
+    } else if (hasProtocolHack) {
+        Vfp306Compatibility.INSTANCE.unsafeSelectProtocolVersion(protocolId)
+    } else {
         error("ViaFabricPlus is not loaded")
-    }
-
-    runCatching {
-        val version = VersionEnum.fromProtocolId(protocolId)
-            ?: error("Protocol version $protocolId not found")
-
-        ProtocolHack.setTargetVersion(version)
-    }.onFailure {
-        logger.error("Failed to select protocol version", it)
     }
 }
 
-fun openViaFabricPlusScreen() {
+fun openVfpProtocolSelection() {
     // Check if the ViaFabricPlus mod is loaded
     if (!usesViaFabricPlus) {
-        error("ViaFabricPlus is not loaded")
+        logger.error("ViaFabricPlus is not loaded")
+        return
     }
 
-    runCatching {
-        ProtocolSelectionScreen.INSTANCE.open(mc.currentScreen ?: TitleScreen())
-    }.onFailure {
-        logger.error("Failed to open ViaFabricPlus screen", it)
-    }
+    VfpCompatibility.INSTANCE.unsafeOpenVfpProtocolSelection()
 }
 
 fun disableConflictingVfpOptions() {
     // Check if the ViaFabricPlus mod is loaded
-    if (!usesViaFabricPlus) {
+    if (!usesViaFabricPlus || !hasVisualSettings) {
         return
     }
 
-    runCatching {
-        val visualSettings = VisualSettings.global()
-
-        // 1 == off, 0 == on
-        visualSettings.enableSwordBlocking.value = 1
-        visualSettings.enableBlockHitAnimation.value = 1
-    }.onFailure {
-        logger.error("Failed to disable conflicting options", it)
-    }
+    VfpCompatibility.INSTANCE.unsafeDsableConflictingVfpOptions()
 }
+

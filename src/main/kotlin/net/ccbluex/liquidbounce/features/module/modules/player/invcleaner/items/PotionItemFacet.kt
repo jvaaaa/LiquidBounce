@@ -1,6 +1,10 @@
 package net.ccbluex.liquidbounce.features.module.modules.player.invcleaner.items
 
+import it.unimi.dsi.fastutil.objects.ObjectArrayList
 import net.ccbluex.liquidbounce.features.module.modules.player.invcleaner.*
+import net.ccbluex.liquidbounce.utils.inventory.ItemSlot
+import net.ccbluex.liquidbounce.utils.item.getPotionEffects
+import net.ccbluex.liquidbounce.utils.kotlin.mapInt
 import net.ccbluex.liquidbounce.utils.sorting.ComparatorChain
 import net.ccbluex.liquidbounce.utils.sorting.Tier
 import net.minecraft.entity.effect.StatusEffect
@@ -8,7 +12,6 @@ import net.minecraft.entity.effect.StatusEffects
 import net.minecraft.item.LingeringPotionItem
 import net.minecraft.item.PotionItem
 import net.minecraft.item.SplashPotionItem
-import net.minecraft.potion.PotionUtil
 import java.util.*
 
 class PotionItemFacet(itemSlot: ItemSlot) : ItemFacet(itemSlot) {
@@ -34,19 +37,10 @@ class PotionItemFacet(itemSlot: ItemSlot) : ItemFacet(itemSlot) {
          * - etc.
          */
         private object PreferHigherTierPotions : Comparator<PotionItemFacet> {
-            override fun compare(o1: PotionItemFacet, o2: PotionItemFacet): Int {
-                val o1EffectScores =
-                    PotionUtil.getPotionEffects(o1.itemStack)
-                        .map { tierOf(it.effectType).score }
-                        .sortedDescending()
-                        .toTypedArray()
-                val o2EffectScores =
-                    PotionUtil.getPotionEffects(o2.itemStack)
-                        .map { tierOf(it.effectType).score }
-                        .sortedDescending()
-                        .toTypedArray()
-
-                return Arrays.compare(o1EffectScores, o2EffectScores)
+            override fun compare(o1: PotionItemFacet, o2: PotionItemFacet): Int = compareValuesBy(o1, o2) { o ->
+                o.itemStack.getPotionEffects()
+                    .mapTo(ObjectArrayList(8)) { it.effectType.value().tier }
+                    .apply { sortDescending() }
             }
         }
 
@@ -55,19 +49,10 @@ class PotionItemFacet(itemSlot: ItemSlot) : ItemFacet(itemSlot) {
          * - Anything (S-Tier) II + Anything (S-Tier) I > Anything (S-Tier) I + Anything (S-Tier) I
          */
         private object PreferAmplifier : Comparator<PotionItemFacet> {
-            override fun compare(o1: PotionItemFacet, o2: PotionItemFacet): Int {
-                val o1EffectScores =
-                    PotionUtil.getPotionEffects(o1.itemStack)
-                        .sortedByDescending { tierOf(it.effectType).score }
-                        .map { it.amplifier }
-                        .toTypedArray()
-                val o2EffectScores =
-                    PotionUtil.getPotionEffects(o2.itemStack)
-                        .sortedByDescending { tierOf(it.effectType).score }
-                        .map { it.amplifier }
-                        .toTypedArray()
-
-                return Arrays.compare(o1EffectScores, o2EffectScores)
+            override fun compare(o1: PotionItemFacet, o2: PotionItemFacet): Int = compareValuesBy(o1, o2) { o ->
+                o.itemStack.getPotionEffects()
+                    .sortedByDescending { it.effectType.value().tier }
+                    .mapInt { it.amplifier }
             }
         }
 
@@ -97,25 +82,15 @@ class PotionItemFacet(itemSlot: ItemSlot) : ItemFacet(itemSlot) {
          * - `S (0:30) + A (1:00) > S (1:00) + A (20:00)`
          */
         private object PreferHigherDurationPotions : Comparator<PotionItemFacet> {
-            override fun compare(o1: PotionItemFacet, o2: PotionItemFacet): Int {
-                val o1EffectScores =
-                    PotionUtil.getPotionEffects(o1.itemStack)
-                        .sortedByDescending { tierOf(it.effectType).score }
-                        .map { it.duration }
-                        .toTypedArray()
-                val o2EffectScores =
-                    PotionUtil.getPotionEffects(o2.itemStack)
-                        .sortedByDescending { tierOf(it.effectType).score }
-                        .map { it.duration }
-                        .toTypedArray()
-
-                return Arrays.compare(o1EffectScores, o2EffectScores)
+            override fun compare(o1: PotionItemFacet, o2: PotionItemFacet): Int = compareValuesBy(o1, o2) { o ->
+                o.itemStack.getPotionEffects()
+                    .sortedByDescending { it.effectType.value().tier }
+                    .mapInt { it.duration }
             }
         }
 
-        private fun tierOf(statusEffect: StatusEffect): Tier {
-            return GOOD_STATUS_EFFECT_TIER_LIST[statusEffect] ?: return Tier.F
-        }
+        private val StatusEffect.tier: Tier
+            get() = GOOD_STATUS_EFFECT_TIER_LIST[this] ?: Tier.F
 
         private val GOOD_STATUS_EFFECT_TIER_LIST = hashMapOf(
             StatusEffects.INSTANT_HEALTH to Tier.S,
@@ -138,7 +113,8 @@ class PotionItemFacet(itemSlot: ItemSlot) : ItemFacet(itemSlot) {
             StatusEffects.NIGHT_VISION to Tier.C,
 
             StatusEffects.LUCK to Tier.D,
-        )
+        ).mapKeys { it.key.value() }
+
         val BAD_STATUS_EFFECTS = hashSetOf(
             StatusEffects.SLOWNESS,
             StatusEffects.MINING_FATIGUE,
@@ -155,6 +131,7 @@ class PotionItemFacet(itemSlot: ItemSlot) : ItemFacet(itemSlot) {
             StatusEffects.BAD_OMEN,
             StatusEffects.DARKNESS,
         )
+
         val GOOD_STATUS_EFFECTS = hashSetOf(
             StatusEffects.SPEED,
             StatusEffects.HASTE,

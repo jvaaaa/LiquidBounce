@@ -1,9 +1,15 @@
 import {REST_BASE} from "./host";
 import type {
-    Account, ClientInfo, ClientUpdate,
+    Account,
+    Browser,
+    ClientInfo,
+    ClientUpdate,
     Component,
     ConfigurableSetting,
     GameWindow,
+    GeneratorResult,
+    HitResult,
+    MinecraftKeybind,
     Module,
     PersistentStorageItem,
     PlayerData,
@@ -16,13 +22,20 @@ import type {
     VirtualScreen,
     World
 } from "./types";
-import {replace} from "svelte-spa-router";
+import type {PlayerInventory} from "./events";
 
 const API_BASE = `${REST_BASE}/api/v1`;
 
 export async function getModules(): Promise<Module[]> {
     const response = await fetch(`${API_BASE}/client/modules`);
     const data: [Module] = await response.json();
+
+    return data;
+}
+
+export async function getModule(name: string): Promise<Module> {
+    const response = await fetch(`${API_BASE}/client/module/${name}`);
+    const data = await response.json();
 
     return data;
 }
@@ -40,6 +53,23 @@ export async function setModuleSettings(name: string, settings: ConfigurableSett
     const searchParams = new URLSearchParams({name});
 
     await fetch(`${API_BASE}/client/modules/settings?${searchParams.toString()}`, {
+        method: "PUT",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(settings)
+    });
+}
+
+export async function getSpooferSettings(): Promise<ConfigurableSetting> {
+    const response = await fetch(`${API_BASE}/client/spoofer`);
+    const data = await response.json();
+
+    return data;
+}
+
+export async function setSpooferSettings(settings: ConfigurableSetting) {
+    await fetch(`${API_BASE}/client/spoofer`, {
         method: "PUT",
         headers: {
             "Content-Type": "application/json"
@@ -102,11 +132,32 @@ export async function getPlayerData(): Promise<PlayerData> {
     return data;
 }
 
-export async function getPrintableKeyName(code: number): Promise<PrintableKey> {
-    const searchParams = new URLSearchParams({code: code.toString()});
+export async function getPlayerInventory(): Promise<PlayerInventory> {
+    const response = await fetch(`${API_BASE}/client/player/inventory`);
+    const data: PlayerInventory = await response.json();
+
+    return data;
+}
+
+export async function getCrosshairData(): Promise<HitResult> {
+    const response = await fetch(`${API_BASE}/client/crosshair`);
+    const data: HitResult = await response.json();
+
+    return data;
+}
+
+export async function getPrintableKeyName(key: string): Promise<PrintableKey> {
+    const searchParams = new URLSearchParams({key});
 
     const response = await fetch(`${API_BASE}/client/input?${searchParams.toString()}`);
     const data: PrintableKey = await response.json();
+
+    return data;
+}
+
+export async function getMinecraftKeybinds(): Promise<MinecraftKeybind[]> {
+    const response = await fetch(`${API_BASE}/client/keybinds`);
+    const data: MinecraftKeybind[] = await response.json();
 
     return data;
 }
@@ -148,6 +199,12 @@ export async function openScreen(name: string) {
             "Content-Type": "application/json"
         },
         body: JSON.stringify({name})
+    });
+}
+
+export async function deleteScreen() {
+    await fetch(`${API_BASE}/client/screen`, {
+        method: "DELETE"
     });
 }
 
@@ -238,13 +295,24 @@ export async function restoreSession() {
     });
 }
 
-export async function addCrackedAccount(username: string) {
+export async function orderAccounts(order: number[]) {
+    await fetch(`${API_BASE}/client/accounts/order`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({order})
+    });
+}
+
+
+export async function addCrackedAccount(username: string, online: boolean) {
     await fetch(`${API_BASE}/client/accounts/new/cracked`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({username})
+        body: JSON.stringify({username, online})
     });
 }
 
@@ -320,13 +388,13 @@ export async function loginToAccount(id: number) {
     });
 }
 
-export async function directLoginToCrackedAccount(username: string) {
+export async function directLoginToCrackedAccount(username: string, online: boolean) {
     await fetch(`${API_BASE}/client/account/login/cracked`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({username})
+        body: JSON.stringify({username, online})
     });
 }
 
@@ -339,7 +407,6 @@ export async function directLoginToSessionAccount(token: string) {
         body: JSON.stringify({token})
     });
 }
-
 
 export async function getAccounts(): Promise<Account[]> {
     const response = await fetch(`${API_BASE}/client/accounts`);
@@ -435,14 +502,24 @@ export async function setProxyFavorite(id: number, favorite: boolean) {
     }
 }
 
-export async function addProxy(host: string, port: number, username: string, password: string) {
+export async function addProxy(host: string, port: number, username: string, password: string, forwardAuthentication: boolean) {
     await fetch(`${API_BASE}/client/proxies/add`, {
         method: "POST",
         headers: {
             "Content-Type": "application/json"
         },
-        body: JSON.stringify({host, port, username, password})
+        body: JSON.stringify({host, port, username, password,forwardAuthentication})
     });
+}
+
+export async function editProxy(id: number, host: string, port: number, username: string, password: string, forwardAuthentication: boolean) {
+    await fetch(`${API_BASE}/client/proxies/edit`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({id, host, port, username, password, forwardAuthentication})
+    })
 }
 
 export async function addProxyFromClipboard() {
@@ -504,7 +581,73 @@ export async function reconnectToServer() {
 }
 
 export async function toggleBackgroundShaderEnabled() {
-    await fetch(`${API_BASE}/client/theme/shader/switch`, {
+    await fetch(`${API_BASE}/client/shader`, {
         method: "POST",
+    });
+}
+
+export async function getBrowser(): Promise<Browser> {
+    const response = await fetch(`${API_BASE}/client/browser`);
+    const data: Browser = await response.json();
+
+    return data;
+}
+
+export async function browserNavigate(url: string) {
+    await fetch(`${API_BASE}/client/browser/navigate`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({url})
+    })
+}
+
+export async function browserGoForward() {
+    await fetch(`${API_BASE}/client/browser/forward`, {
+        method: "POST",
+    });
+}
+
+export async function browserGoBack() {
+    await fetch(`${API_BASE}/client/browser/back`, {
+        method: "POST",
+    });
+}
+
+export async function browserReload() {
+    await fetch(`${API_BASE}/client/browser/reload`, {
+        method: "POST",
+    });
+}
+
+export async function browserForceReload() {
+    await fetch(`${API_BASE}/client/browser/forceReload`, {
+        method: "POST",
+    });
+}
+
+export async function browserClose() {
+    await fetch(`${API_BASE}/client/browser/close`, {
+        method: "POST",
+    });
+}
+
+export async function randomUsername(): Promise<string> {
+    let response = await fetch(`${API_BASE}/client/account/random-name`, {
+        method: "POST",
+    });
+    let data: GeneratorResult = await response.json();
+
+    return data.name;
+}
+
+export async function setTyping(typing: boolean) {
+    await fetch(`${API_BASE}/client/typing`, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify({typing})
     });
 }

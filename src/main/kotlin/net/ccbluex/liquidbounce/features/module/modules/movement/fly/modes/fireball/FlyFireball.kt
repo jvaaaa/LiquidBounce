@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015 - 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,17 +20,17 @@
 
 package net.ccbluex.liquidbounce.features.module.modules.movement.fly.modes.fireball
 
-import net.ccbluex.liquidbounce.config.Choice
-import net.ccbluex.liquidbounce.config.ChoiceConfigurable
-import net.ccbluex.liquidbounce.config.ToggleableConfigurable
-import net.ccbluex.liquidbounce.event.repeatable
+import net.ccbluex.liquidbounce.config.types.Choice
+import net.ccbluex.liquidbounce.config.types.ChoiceConfigurable
+import net.ccbluex.liquidbounce.config.types.ToggleableConfigurable
+import net.ccbluex.liquidbounce.event.tickHandler
 import net.ccbluex.liquidbounce.features.module.modules.movement.fly.ModuleFly
-import net.ccbluex.liquidbounce.features.module.modules.movement.fly.modes.fireball.technieques.FlyFireballCustomTechnique
-import net.ccbluex.liquidbounce.features.module.modules.movement.fly.modes.fireball.technieques.FlyFireballLegitTechnique
+import net.ccbluex.liquidbounce.features.module.modules.movement.fly.modes.fireball.techniques.FlyFireballCustomTechnique
+import net.ccbluex.liquidbounce.features.module.modules.movement.fly.modes.fireball.techniques.FlyFireballLegitTechnique
 import net.ccbluex.liquidbounce.features.module.modules.movement.fly.modes.fireball.trigger.FlyFireballInstantTrigger
 import net.ccbluex.liquidbounce.features.module.modules.movement.fly.modes.fireball.trigger.FlyFireballOnEdgeTrigger
 import net.ccbluex.liquidbounce.utils.client.SilentHotbar
-import net.ccbluex.liquidbounce.utils.item.interactItem
+import net.ccbluex.liquidbounce.utils.inventory.interactItem
 import net.minecraft.item.FireChargeItem
 import net.minecraft.util.Hand
 
@@ -70,13 +70,14 @@ internal object FlyFireball : Choice("Fireball") {
     }
 
     @Suppress("unused")
-    val handleSilentFireballSelection = repeatable {
+    val handleSilentFireballSelection = tickHandler {
         if (AutoFireball.enabled) {
             val bestMainHandSlot = findFireballSlot()
             if (bestMainHandSlot != null) {
                 SilentHotbar.selectSlotSilently(this, bestMainHandSlot, AutoFireball.slotResetDelay)
-            } else
+            } else {
                 SilentHotbar.resetSlot(this)
+            }
         } else {
             SilentHotbar.resetSlot(this)
         }

@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015 - 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@
 package net.ccbluex.liquidbounce.features.command
 
 import com.mojang.brigadier.suggestion.SuggestionsBuilder
-import net.ccbluex.liquidbounce.features.module.QuickImports
+import net.ccbluex.liquidbounce.features.module.MinecraftShortcuts
 import net.ccbluex.liquidbounce.lang.translation
 import net.ccbluex.liquidbounce.utils.client.convertToString
 import net.minecraft.text.MutableText
@@ -27,6 +27,7 @@ import java.util.*
 
 typealias CommandHandler = (Command, Array<Any>) -> Unit
 
+@Suppress("LongParameterList")
 class Command(
     val name: String,
     val aliases: Array<out String>,
@@ -34,8 +35,9 @@ class Command(
     val subcommands: Array<Command>,
     val executable: Boolean,
     val handler: CommandHandler?,
+    val requiresIngame: Boolean,
     private var parentCommand: Command? = null
-) : QuickImports {
+) : MinecraftShortcuts {
     val translationBaseKey: String
         get() = "liquidbounce.command.${getParentKeys(this, name)}"
 
@@ -62,13 +64,30 @@ class Command(
 
     private fun getParentKeys(currentCommand: Command?, current: String): String {
         val parentName = currentCommand?.parentCommand?.name
-        return if (parentName != null) getParentKeys(
-            currentCommand.parentCommand, "$parentName.subcommand.$current"
-        ) else current
+
+        return if (parentName != null) {
+            getParentKeys(currentCommand.parentCommand, "$parentName.subcommand.$current")
+        } else {
+            current
+        }
     }
 
     fun result(key: String, vararg args: Any): MutableText {
-        return translation("$translationBaseKey.result.$key", *args)
+        return translation("$translationBaseKey.result.$key", args = args)
+    }
+
+    fun resultWithTree(key: String, vararg args: Any): MutableText {
+        var parentCommand = this.parentCommand
+        if (parentCommand != null) {
+            // Keep going until parent command is null
+            while (parentCommand?.parentCommand != null) {
+                parentCommand = parentCommand.parentCommand
+            }
+
+            return parentCommand!!.result(key, args = args)
+        }
+
+        return translation("$translationBaseKey.result.$key", args = args)
     }
 
     /**
@@ -134,10 +153,12 @@ class Command(
 
         val offset = args.size - commandIdx - 1
 
-        if (offset == 0 && isNewParameter || offset == 1 && !isNewParameter) {
-            val comparedAgainst = if (isNewParameter) {
-                ""
-            } else args[offset]
+        val isAtSecondParameterBeginning = offset == 0 && isNewParameter
+        val isInSecondParameter = offset == 1 && !isNewParameter
+
+        // Handle Subcommands
+        if (isAtSecondParameterBeginning || isInSecondParameter) {
+            val comparedAgainst = if (!isNewParameter) args[offset] else ""
 
             this.subcommands.forEach { subcommand ->
                 if (subcommand.name.startsWith(comparedAgainst, true)) {
@@ -174,8 +195,8 @@ class Command(
 
         val handler = parameter.autocompletionHandler ?: return
 
-        for (s in handler(args.getOrElse(idx) { "" }, args)) {
-            builder.suggest(s)
-        }
+        val suggestions = handler.autocomplete(begin = args.getOrElse(idx) { "" }, args = args)
+
+        suggestions.forEach(builder::suggest)
     }
 }

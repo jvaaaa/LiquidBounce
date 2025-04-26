@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ import org.spongepowered.asm.mixin.injection.At;
 public class MixinEntryListWidget {
 
     @ModifyExpressionValue(method = "renderWidget",
-            at = @At(value = "FIELD", target = "Lnet/minecraft/client/gui/widget/EntryListWidget;renderBackground:Z"))
+            at = @At(value = "FIELD", target = "Lnet/minecraft/client/gui/widget/EntryListWidget;renderHeader:Z"))
     private boolean renderBackground(boolean original) {
         return original && HideAppearance.INSTANCE.isHidingNow();
     }

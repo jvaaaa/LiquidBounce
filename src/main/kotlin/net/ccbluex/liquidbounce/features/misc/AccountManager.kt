@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015 - 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,16 +21,13 @@ package net.ccbluex.liquidbounce.features.misc
 import com.mojang.authlib.minecraft.MinecraftSessionService
 import com.mojang.authlib.yggdrasil.YggdrasilEnvironment
 import com.mojang.authlib.yggdrasil.YggdrasilUserApiService
-import kotlinx.coroutines.DelicateCoroutinesApi
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import net.ccbluex.liquidbounce.authlib.account.*
 import net.ccbluex.liquidbounce.authlib.yggdrasil.clientIdentifier
 import net.ccbluex.liquidbounce.config.ConfigSystem
-import net.ccbluex.liquidbounce.config.Configurable
-import net.ccbluex.liquidbounce.config.ListValueType
+import net.ccbluex.liquidbounce.config.types.Configurable
+import net.ccbluex.liquidbounce.config.types.ListValueType
+import net.ccbluex.liquidbounce.event.EventListener
 import net.ccbluex.liquidbounce.event.EventManager
-import net.ccbluex.liquidbounce.event.Listenable
 import net.ccbluex.liquidbounce.event.events.AccountManagerAdditionResultEvent
 import net.ccbluex.liquidbounce.event.events.AccountManagerLoginResultEvent
 import net.ccbluex.liquidbounce.event.events.SessionEvent
@@ -42,13 +39,14 @@ import net.minecraft.client.session.Session
 import java.net.Proxy
 import java.util.*
 
-object AccountManager : Configurable("Accounts"), Listenable {
+@Suppress("TooManyFunctions")
+object AccountManager : Configurable("Accounts"), EventListener {
 
     val accounts by value(name, mutableListOf<MinecraftAccount>(), listType = ListValueType.Account)
 
-    var initialSession: SessionData? = null
+    private var initialSession: SessionData? = null
 
-    val sessionHandler = handler<SessionEvent> {
+    private val sessionHandler = handler<SessionEvent> {
         if (initialSession == null) {
             initialSession = SessionData(mc.session, mc.sessionService, mc.profileKeys)
         }
@@ -56,10 +54,6 @@ object AccountManager : Configurable("Accounts"), Listenable {
 
     init {
         ConfigSystem.root(this)
-    }
-
-    fun loginAccountAsync(id: Int) = GlobalScope.launch {
-        loginAccount(id)
     }
 
     fun loginAccount(id: Int) = runCatching {
@@ -100,12 +94,10 @@ object AccountManager : Configurable("Accounts"), Listenable {
         EventManager.callEvent(AccountManagerLoginResultEvent(error = it.message ?: "Unknown error"))
     }.getOrThrow()
 
-    private val USERNAME_REGEX = Regex("[a-zA-z0-9_]{1,16}")
-
     /**
      * Cracked account. This can only be used to join cracked servers and not premium servers.
      */
-    fun newCrackedAccount(username: String) {
+    fun newCrackedAccount(username: String, online: Boolean = false) {
         if (username.isEmpty()) {
             EventManager.callEvent(AccountManagerAdditionResultEvent(error = "Username is empty!"))
             return
@@ -113,11 +105,6 @@ object AccountManager : Configurable("Accounts"), Listenable {
 
         if (username.length > 16) {
             EventManager.callEvent(AccountManagerAdditionResultEvent(error = "Username is too long!"))
-            return
-        }
-
-        if (!USERNAME_REGEX.matches(username)) {
-            EventManager.callEvent(AccountManagerAdditionResultEvent(error = "Username contains invalid characters!"))
             return
         }
 
@@ -128,7 +115,7 @@ object AccountManager : Configurable("Accounts"), Listenable {
         }
 
         // Create new cracked account
-        accounts += CrackedAccount(username).also { it.refresh() }
+        accounts += CrackedAccount(username, online).also { it.refresh() }
 
         // Store configurable
         ConfigSystem.storeConfigurable(this@AccountManager)
@@ -136,8 +123,7 @@ object AccountManager : Configurable("Accounts"), Listenable {
         EventManager.callEvent(AccountManagerAdditionResultEvent(username = username))
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
-    fun loginCrackedAccountAsync(username: String) {
+    fun loginCrackedAccount(username: String, online: Boolean = false) {
         if (username.isEmpty()) {
             EventManager.callEvent(AccountManagerAdditionResultEvent(error = "Username is empty!"))
             return
@@ -148,18 +134,13 @@ object AccountManager : Configurable("Accounts"), Listenable {
             return
         }
 
-        val account = CrackedAccount(username).also { it.refresh() }
-        GlobalScope.launch {
-            loginDirectAccount(account)
-        }
+        val account = CrackedAccount(username, online).also { it.refresh() }
+        loginDirectAccount(account)
     }
 
-    @OptIn(DelicateCoroutinesApi::class)
-    fun loginSessionAccountAsync(token: String) = GlobalScope.launch {
+    fun loginSessionAccount(token: String) {
         val account = SessionAccount(token).also { it.refresh() }
-        GlobalScope.launch {
-            loginDirectAccount(account)
-        }
+        loginDirectAccount(account)
     }
 
     /**
@@ -271,16 +252,11 @@ object AccountManager : Configurable("Accounts"), Listenable {
             EventManager.callEvent(AccountManagerAdditionResultEvent(username = profile.username))
         }
 
-
         // Store configurable
         ConfigSystem.storeConfigurable(this@AccountManager)
     }.onFailure {
         logger.error("Failed to login into altening account (for add-process)", it)
         EventManager.callEvent(AccountManagerAdditionResultEvent(error = it.message ?: "Unknown error"))
-    }
-
-    fun generateAlteningAccountAsync(apiToken: String) = GlobalScope.launch {
-        generateAlteningAccount(apiToken)
     }
 
     fun generateAlteningAccount(apiToken: String) = runCatching {

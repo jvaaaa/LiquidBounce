@@ -1,21 +1,17 @@
 <script lang="ts">
-    import { createEventDispatcher } from "svelte";
-    import type {
-        ModuleSetting,
-        TogglableSetting,
-        BooleanSetting as TBooleanSetting,
-    } from "../../../integration/types";
+    import {createEventDispatcher} from "svelte";
+    import type {BooleanSetting as TBooleanSetting, ModuleSetting, TogglableSetting,} from "../../../integration/types";
     import ExpandArrow from "./common/ExpandArrow.svelte";
     import GenericSetting from "./common/GenericSetting.svelte";
     import Switch from "./common/Switch.svelte";
-    import { setItem } from "../../../integration/persistent_storage";
+    import {setItem} from "../../../integration/persistent_storage";
+    import {convertToSpacedString, spaceSeperatedNames} from "../../../theme/theme_config";
 
     export let setting: ModuleSetting;
     export let path: string;
 
     const cSetting = setting as TogglableSetting;
     const thisPath = `${path}.${cSetting.name}`;
-    let skipAnimationDelay = false;
 
     const dispatch = createEventDispatcher();
 
@@ -34,7 +30,6 @@
 
     function toggleExpanded() {
         expanded = !expanded;
-        skipAnimationDelay = true;
     }
 </script>
 
@@ -43,16 +38,16 @@
         <!-- svelte-ignore a11y-no-static-element-interactions -->
         <div class="head expand" class:expanded on:contextmenu|preventDefault={toggleExpanded}>
             <Switch
-                name={cSetting.name}
+                name={$spaceSeperatedNames ? convertToSpacedString(cSetting.name) : cSetting.name}
                 bind:value={enabledSetting.value}
                 on:change={handleChange}
             />
-            <ExpandArrow bind:expanded on:click={() => skipAnimationDelay = true} />
+            <ExpandArrow bind:expanded />
         </div>
     {:else}
         <div class="head" class:expanded>
             <Switch
-                name={cSetting.name}
+                name={$spaceSeperatedNames ? convertToSpacedString(cSetting.name) : cSetting.name}
                 bind:value={enabledSetting.value}
                 on:change={handleChange}
             />
@@ -62,14 +57,14 @@
     {#if expanded}
         <div class="nested-settings">
             {#each nestedSettings as setting (setting.name)}
-                <GenericSetting {skipAnimationDelay} path={thisPath} bind:setting on:change={handleChange} />
+                <GenericSetting  path={thisPath} bind:setting on:change={handleChange} />
             {/each}
         </div>
     {/if}
 </div>
 
 <style lang="scss">
-    @import "../../../colors.scss";
+    @use "../../../colors.scss" as *;
 
     .setting {
         padding: 7px 0px;

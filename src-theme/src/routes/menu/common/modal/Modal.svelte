@@ -30,7 +30,7 @@
 {/if}
 
 <style lang="scss">
-  @import "../../../../colors";
+  @use "../../../../colors.scss" as *;
 
   .modal-wrapper {
     position: fixed;
@@ -44,7 +44,7 @@
 
   .modal {
     background-color: rgba($menu-base-color, 0.7);
-    width: 500px;
+    min-width: 500px;
     position: fixed;
     left: 50%;
     top: 50%;
@@ -53,6 +53,7 @@
     display: flex;
     flex-direction: column;
     border-radius: 5px;
+    box-shadow: 0 0 10px rgba($menu-base-color, 0.5);
   }
 
   .title {
@@ -115,7 +116,7 @@
     }
   }
 
-  @media screen and (max-height: 1000px) {
+  @media screen and (max-height: 1100px) {
     .modal {
       zoom: 0.8;
     }

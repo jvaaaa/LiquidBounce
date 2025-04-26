@@ -14,9 +14,9 @@
   "overlays": [
     "hud",
     "inventory",
-    "splash",
     "container",
-    "disconnected"
+    "disconnected",
+    "browser"
   ],
   "components": [
     {
@@ -189,11 +189,101 @@
             },
             {
               "name": "Vertical",
-              "value": "Top"
+              "value": "CenterTranslated"
             },
             {
               "name": "VerticalOffset",
-              "value": 550
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "ArmorItems",
+      "value": [
+        {
+          "name": "Enabled",
+          "value": false
+        },
+        {
+          "name": "Alignment",
+          "value": [
+            {
+              "name": "Horizontal",
+              "value": "CenterTranslated"
+            },
+            {
+              "name": "HorizontalOffset",
+              "value": 225
+            },
+            {
+              "name": "Vertical",
+              "value": "Bottom"
+            },
+            {
+              "name": "VerticalOffset",
+              "value": 15
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Inventory",
+      "value": [
+        {
+          "name": "Enabled",
+          "value": false
+        },
+        {
+          "name": "Alignment",
+          "value": [
+            {
+              "name": "Horizontal",
+              "value": "Right"
+            },
+            {
+              "name": "HorizontalOffset",
+              "value": 15
+            },
+            {
+              "name": "Vertical",
+              "value": "Bottom"
+            },
+            {
+              "name": "VerticalOffset",
+              "value": 15
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "CraftingInventory",
+      "value": [
+        {
+          "name": "Enabled",
+          "value": false
+        },
+        {
+          "name": "Alignment",
+          "value": [
+            {
+              "name": "Horizontal",
+              "value": "Right"
+            },
+            {
+              "name": "HorizontalOffset",
+              "value": 15
+            },
+            {
+              "name": "Vertical",
+              "value": "Bottom"
+            },
+            {
+              "name": "VerticalOffset",
+              "value": 150
             }
           ]
         }
@@ -204,7 +294,7 @@
       "value": [
         {
           "name": "Enabled",
-          "value": true
+          "value": false
         },
         {
           "name": "Alignment",
@@ -258,6 +348,96 @@
             {
               "name": "VerticalOffset",
               "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "BlockCounter",
+      "value": [
+        {
+          "name": "Enabled",
+          "value": true
+        },
+        {
+          "name": "Alignment",
+          "value": [
+            {
+              "name": "Horizontal",
+              "value": "Center"
+            },
+            {
+              "name": "HorizontalOffset",
+              "value": -20
+            },
+            {
+              "name": "Vertical",
+              "value": "CenterTranslated"
+            },
+            {
+              "name": "VerticalOffset",
+              "value": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Effects",
+      "value": [
+        {
+          "name": "Enabled",
+          "value": true
+        },
+        {
+          "name": "Alignment",
+          "value": [
+            {
+              "name": "Horizontal",
+              "value": "Right"
+            },
+            {
+              "name": "HorizontalOffset",
+              "value": 15
+            },
+            {
+              "name": "Vertical",
+              "value": "Bottom"
+            },
+            {
+              "name": "VerticalOffset",
+              "value": 15
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Keystrokes",
+      "value": [
+        {
+          "name": "Enabled",
+          "value": false
+        },
+        {
+          "name": "Alignment",
+          "value": [
+            {
+              "name": "Horizontal",
+              "value": "Left"
+            },
+            {
+              "name": "HorizontalOffset",
+              "value": 15
+            },
+            {
+              "name": "Vertical",
+              "value": "Bottom"
+            },
+            {
+              "name": "VerticalOffset",
+              "value": 15
             }
           ]
         }

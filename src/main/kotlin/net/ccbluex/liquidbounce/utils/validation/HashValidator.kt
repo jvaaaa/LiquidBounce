@@ -1,13 +1,11 @@
 package net.ccbluex.liquidbounce.utils.validation
 
-import com.google.gson.Gson
-import com.google.gson.reflect.TypeToken
 import net.ccbluex.liquidbounce.LiquidBounce
+import net.ccbluex.liquidbounce.config.gson.util.decode
 import net.ccbluex.liquidbounce.utils.client.logger
 import org.apache.commons.codec.digest.DigestUtils
 import java.io.File
-import java.io.FileInputStream
-import java.io.InputStreamReader
+import kotlin.concurrent.thread
 
 private const val HASH_FILE_NAME = ".hash"
 
@@ -33,14 +31,12 @@ object HashValidator {
     }
 
     private fun validateHashFile(hashFile: File) {
-        val hashes: (FileInputStream) -> Map<String, String> = {
-            Gson().fromJson(
-                InputStreamReader(it),
-                object : TypeToken<Map<String, String>>() {}.type
-            )
-        }
-
-        val delete = shouldDelete(hashFile, FileInputStream(hashFile).use(hashes))
+        val delete = runCatching {
+            val hashes = decode<Map<String, String>>(hashFile.inputStream())
+            shouldDelete(hashFile, hashes)
+        }.onFailure {
+            logger.warn("Invalid hash file ${hashFile.absolutePath}", it)
+        }.getOrDefault(true)
 
         if (delete) {
             val folderToDelete = hashFile.parentFile
@@ -57,13 +53,11 @@ object HashValidator {
 
         logger.warn("Failed to delete ${folderToDelete.absolutePath}. Retrying on exit...")
 
-        Runtime.getRuntime().addShutdownHook(object : Thread() {
-            override fun run() {
-                runCatching {
-                    folderToDelete.deleteRecursively()
-                }.onFailure {
-                    LiquidBounce.logger.error("Failed to delete ${folderToDelete.absolutePath}.", it)
-                }
+        Runtime.getRuntime().addShutdownHook(thread(start = false) {
+            runCatching {
+                folderToDelete.deleteRecursively()
+            }.onFailure {
+                LiquidBounce.logger.error("Failed to delete ${folderToDelete.absolutePath}.", it)
             }
         })
     }
@@ -81,9 +75,8 @@ object HashValidator {
                 }
 
                 // Read the file, hash it and compare it to the hash in the hash file
-                val data = resolveSibling.readBytes()
-
-                val sha256Hex = DigestUtils.sha256Hex(data)
+                // Use the InputStream, don't read the full file
+                val sha256Hex = resolveSibling.inputStream().use(DigestUtils::sha256Hex)
 
                 if (!sha256Hex.equals(checkedFile.value, ignoreCase = true)) {
                     return true

@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015 - 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -19,15 +19,18 @@
 package net.ccbluex.liquidbounce.features.module.modules.player.invcleaner
 
 import net.ccbluex.liquidbounce.features.module.modules.player.invcleaner.items.ItemFacet
+import net.ccbluex.liquidbounce.utils.inventory.ItemSlot
 import net.ccbluex.liquidbounce.utils.item.isNothing
 
 class CleanupPlanGenerator(
     private val template: CleanupPlanPlacementTemplate,
     private val availableItems: List<ItemSlot>,
-) {
+) : ItemPacker.ItemAmountContraintProvider {
     private val hotbarSwaps: ArrayList<InventorySwap> = ArrayList()
 
     private val packer = ItemPacker()
+
+    private val currentLimit = HashMap<ItemNumberContraintGroup, Int>()
 
     // TODO Implement greedy check
     /**
@@ -58,6 +61,9 @@ class CleanupPlanGenerator(
             processItemCategory(category, availableItems)
         }
 
+        // We aren't allowed to touch those, so we just consider them as useful.
+        packer.usefulItems.addAll(this.template.forbiddenSlots)
+
         return InventoryCleanupPlan(
             usefulItems = packer.usefulItems,
             swaps = hotbarSwaps,
@@ -69,13 +75,6 @@ class CleanupPlanGenerator(
         category: ItemCategory,
         availableItems: List<ItemFacet>,
     ) {
-        val maxItemCount =
-            if (category.type.allowOnlyOne) {
-                1
-            } else {
-                template.itemLimitPerCategory[category] ?: Int.MAX_VALUE
-            }
-
         val hotbarSlotsToFill = this.categoryToSlotsMap[category]
 
         // We need to fill all hotbar slots with this item type.
@@ -88,8 +87,9 @@ class CleanupPlanGenerator(
             this.packer.packItems(
                 itemsToFillIn = prioritizedItemList,
                 hotbarSlotsToFill = hotbarSlotsToFill,
-                maxItemCount = maxItemCount,
-                requiredStackCount = hotbarSlotsToFill?.size ?: 0,
+                contraintProvider = this,
+                forbiddenSlots = this.template.forbiddenSlots,
+                forbiddenSlotsToFill = this.template.forbiddenSlotsToFill
             )
 
         this.hotbarSwaps.addAll(requiredMoves)
@@ -108,13 +108,41 @@ class CleanupPlanGenerator(
                 continue
             }
 
-            val itemType = ItemId(stack.item, stack.nbt)
+            val itemType = ItemId(stack.item, stack.components)
             val stacksOfType = itemsByType.computeIfAbsent(itemType) { mutableListOf() }
 
             stacksOfType.add(availableSlot)
         }
 
         return itemsByType
+    }
+
+    override fun getSatisfactionStatus(item: ItemFacet): ItemPacker.ItemAmountContraintProvider.SatisfactionStatus {
+        val constraints = this.template.itemAmountConstraintProvider(item)
+
+        constraints.sortBy { it.group.priority }
+
+        for (constraintInfo in constraints) {
+            val currentCount = this.currentLimit[constraintInfo.group] ?: 0
+
+            if (currentCount > constraintInfo.group.acceptableRange.last) {
+                return ItemPacker.ItemAmountContraintProvider.SatisfactionStatus.OVERSATURATED
+            } else if (currentCount < constraintInfo.group.acceptableRange.first) {
+                return ItemPacker.ItemAmountContraintProvider.SatisfactionStatus.NOT_SATISFIED
+            }
+        }
+
+        return ItemPacker.ItemAmountContraintProvider.SatisfactionStatus.SATISFIED
+    }
+
+    override fun addItem(item: ItemFacet) {
+        val constraints = this.template.itemAmountConstraintProvider(item)
+
+        for (constraintInfo in constraints) {
+            val current = this.currentLimit.getOrDefault(constraintInfo.group, 0)
+
+            this.currentLimit[constraintInfo.group] = current + constraintInfo.amountAddedByItem
+        }
     }
 }
 
@@ -124,14 +152,16 @@ class CleanupPlanPlacementTemplate(
      */
     val slotContentMap: Map<ItemSlot, ItemSortChoice>,
     /**
-     * Contains an item limit for each category. e.g. BLOCK -> 128 will cause every stack above two to be thrown out.
-     * If an item is not in this map, there is no limit.
+     * A function which provides constraint groups for each item category and the number which the item counts against
+     * the given constraint. More info on how constraints work at [ItemNumberContraintGroup].
      */
-    val itemLimitPerCategory: Map<ItemCategory, Int>,
+    val itemAmountConstraintProvider: (ItemFacet) -> ArrayList<ItemConstraintInfo>,
     /**
      * If false, slots which also contains items of that category, those items are not replaced with other items.
      */
     val isGreedy: Boolean,
+    val forbiddenSlots: Set<ItemSlot>,
+    val forbiddenSlotsToFill: Set<ItemSlot>
 )
 
 enum class ItemSlotType {

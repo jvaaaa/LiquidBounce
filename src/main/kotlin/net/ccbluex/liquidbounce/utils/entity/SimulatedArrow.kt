@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015 - 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -71,7 +71,8 @@ class SimulatedArrow(
     private fun updateCollision(pos: Vec3d, newPos: Vec3d): HitResult? {
         val world = this.world
 
-        val arrowEntity = ArrowEntity(this.world, this.pos.x, this.pos.y, this.pos.z, ItemStack(Items.ARROW))
+        val arrowEntity = ArrowEntity(this.world, this.pos.x, this.pos.y, this.pos.z, ItemStack(Items.ARROW),
+            null)
 
         // Get landing position
         val blockHitResult = world.raycast(
@@ -102,7 +103,9 @@ class SimulatedArrow(
                     +size
                 ).offset(pos).stretch(newPos.subtract(pos)).expand(1.0)
             ) {
-                if (!it.isSpectator && it.isAlive && (it.canHit() || arrowEntity != mc.player && it == arrowEntity)) {
+                val canBeHit = !it.isSpectator && it.isAlive
+
+                if (canBeHit && (it.canHit() || arrowEntity != mc.player && it == arrowEntity)) {
                     if (arrowEntity.isConnectedThroughVehicle(it)) return@getEntityCollision false
                 } else {
                     return@getEntityCollision false
@@ -124,5 +127,6 @@ class SimulatedArrow(
         return null
     }
 
+    @Suppress("FunctionOnlyReturningConstant")
     private fun isTouchingWater(): Boolean = false
 }

@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -15,67 +15,57 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with LiquidBounce. If not, see <https://www.gnu.org/licenses/>.
- *
- *
  */
-
 package net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features
 
-import net.ccbluex.liquidbounce.config.ToggleableConfigurable
-import net.ccbluex.liquidbounce.event.events.MovementInputEvent
-import net.ccbluex.liquidbounce.event.handler
+import net.ccbluex.liquidbounce.features.module.modules.render.ModuleDebug
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ModuleScaffold
-import net.ccbluex.liquidbounce.utils.aiming.Rotation
-import net.ccbluex.liquidbounce.utils.aiming.raycast
-import net.ccbluex.liquidbounce.utils.block.targetFinding.BlockPlacementTarget
-import net.ccbluex.liquidbounce.utils.entity.SimulatedPlayer
-import net.ccbluex.liquidbounce.utils.kotlin.EventPriorityConvention
+import net.ccbluex.liquidbounce.utils.aiming.data.Rotation
+import net.ccbluex.liquidbounce.utils.block.targetfinding.BlockPlacementTarget
+import net.ccbluex.liquidbounce.utils.client.player
+import net.ccbluex.liquidbounce.utils.entity.isCloseToEdge
+import net.ccbluex.liquidbounce.utils.movement.DirectionalInput
+import kotlin.math.max
 
-object ScaffoldLedgeFeature : ToggleableConfigurable(ModuleScaffold, "Ledge", false) {
-
-    var sneakTime by int("SneakTime", 1, 0..10)
-
-    var sneakTicks = 0
-
-    fun ledge(simulatedPlayer: SimulatedPlayer, target: BlockPlacementTarget?, rotation: Rotation) {
-        if (!enabled) {
-            return
-        }
-
-        val ticks = ModuleScaffold.rotationsConfigurable.howLongItTakes(rotation)
-        val simClone = simulatedPlayer.clone()
-        simClone.tick()
-
-        val ledgeSoon = simulatedPlayer.clipLedged || simClone.clipLedged
-
-        if ((ticks >= 1 || !ModuleScaffold.hasBlockToBePlaced()) && ledgeSoon) {
-            sneakTicks = sneakTime
-        }
-
-        // todo: introduce rotation prediction because currently I abuse [howLongItTakes] to get the ticks
-        //   and simply check for the correct rotation without considering the Rotation Manager at all
-        val currentCrosshairTarget = raycast(4.5, rotation)
-
-        if ((target == null || currentCrosshairTarget == null)) {
-            if (ledgeSoon) {
-                sneakTicks = sneakTime
-            }
-        } else if (simulatedPlayer.clipLedged) {
-            // Does the crosshair target meet the requirements?
-            if (!target.doesCrosshairTargetFullFillRequirements(currentCrosshairTarget)
-                || !ModuleScaffold.isValidCrosshairTarget(currentCrosshairTarget)) {
-                sneakTicks = sneakTime
-            }
-        }
-
-
+data class LedgeAction(
+    val jump: Boolean = false,
+    val sneakTime: Int = 0,
+    val stopInput: Boolean = false,
+    val stepBack: Boolean = false
+) {
+    companion object {
+        val NO_LEDGE = LedgeAction(jump = false, sneakTime = 0, stopInput = false)
     }
 
-    val handler = handler<MovementInputEvent>(priority = EventPriorityConvention.SAFETY_FEATURE) {
-        if (sneakTicks > 0) {
-            it.sneaking = true
-            sneakTicks--
+}
+
+fun ledge(
+    target: BlockPlacementTarget?,
+    rotation: Rotation,
+    extension: ScaffoldLedgeExtension? = null
+): LedgeAction {
+    if (player.isCloseToEdge(DirectionalInput(player.input))) {
+        val ticks = ModuleScaffold.ScaffoldRotationConfigurable.calculateTicks(rotation)
+
+        ModuleDebug.debugParameter(ModuleScaffold, "TicksUntilDestination", ticks)
+
+        val isLowOnBlocks = ModuleScaffold.blockCount <= 0
+        val isNotReady = ticks >= 1
+
+        if (isLowOnBlocks || isNotReady) {
+            return LedgeAction(jump = false, sneakTime = max(1, ticks))
         }
     }
 
+    return extension?.ledge(
+        target = target,
+        rotation = rotation
+    ) ?: LedgeAction.NO_LEDGE
+}
+
+interface ScaffoldLedgeExtension {
+    fun ledge(
+        target: BlockPlacementTarget?,
+        rotation: Rotation
+    ): LedgeAction
 }

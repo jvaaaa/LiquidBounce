@@ -3,10 +3,10 @@
         addProxyFromClipboard,
         checkProxy,
         connectToProxy as connectToProxyRest,
+        deleteScreen,
         disconnectFromProxy as disconnectFromProxyRest,
         getCurrentProxy,
         getProxies,
-        openScreen,
         removeProxy as removeProxyRest,
         setProxyFavorite,
     } from "../../../integration/rest.js";
@@ -23,12 +23,17 @@
     import type {Proxy} from "../../../integration/types";
     import {onMount} from "svelte";
     import AddProxyModal from "./AddProxyModal.svelte";
+    import EditProxyModal from "./EditProxyModal.svelte";
     import SwitchSetting from "../common/setting/SwitchSetting.svelte";
     import MultiSelect from "../common/setting/select/MultiSelect.svelte";
     import {notification} from "../common/header/notification_store";
     import lookup from "country-code-lookup";
     import {listen} from "../../../integration/ws";
-    import type {ProxyAdditionResultEvent, ProxyCheckResultEvent} from "../../../integration/events.js";
+    import type {
+        ProxyAdditionResultEvent,
+        ProxyCheckResultEvent,
+        ProxyEditResultEvent
+    } from "../../../integration/events.js";
 
     $: {
         let filteredProxies = proxies;
@@ -45,6 +50,7 @@
     }
 
     let addProxyModalVisible = false;
+    let editProxyModalVisible = false;
     let allCountries: string[] = [];
 
     let searchQuery = "";
@@ -54,6 +60,8 @@
     let proxies: Proxy[] = [];
     let renderedProxies = proxies;
     let isConnectedToProxy = false;
+
+    let currentEditProxy: Proxy | null = null;
 
     onMount(async () => {
         await refreshProxies();
@@ -97,11 +105,6 @@
     }
 
     async function connectToProxy(id: number) {
-        notification.set({
-            title: "ProxyManager",
-            message: "Connecting to proxy...",
-            error: false
-        });
         await connectToProxyRest(id);
         notification.set({
             title: "ProxyManager",
@@ -141,7 +144,25 @@
         }
     });
 
-    listen("proxyCheckResult", (e: ProxyCheckResultEvent) => {
+    listen("proxyEditResult", async (e: ProxyEditResultEvent) => {
+        if (e.error) {
+            notification.set({
+                title: "ProxyManager",
+                message: "Couldn't connect to proxy",
+                error: true
+            });
+        } else {
+            notification.set({
+                title: "ProxyManager",
+                message: "Successfully edited proxy",
+                error: false
+            });
+
+            await refreshProxies();
+        }
+    });
+
+    listen("proxyCheckResult", async (e: ProxyCheckResultEvent) => {
         if (e.error) {
             notification.set({
                 title: "ProxyManager",
@@ -154,6 +175,8 @@
                 message: "Proxy is working",
                 error: false
             });
+
+            await refreshProxies();
         }
     });
 
@@ -166,9 +189,23 @@
             error: false
         });
     }
+
+    function editProxy(proxy: Proxy) {
+        currentEditProxy = proxy;
+        editProxyModalVisible = true;
+    }
 </script>
 
 <AddProxyModal bind:visible={addProxyModalVisible}/>
+{#if currentEditProxy}
+    <EditProxyModal bind:visible={editProxyModalVisible} id={currentEditProxy.id}
+                    host={currentEditProxy.host}
+                    port={currentEditProxy.port}
+                    forwardAuthentication={currentEditProxy.forwardAuthentication}
+                    username={currentEditProxy.credentials?.username ?? ""}
+                    password={currentEditProxy.credentials?.password ?? ""}
+                    requiresAuthentication={currentEditProxy.credentials !== undefined}/>
+{/if}
 <Menu>
     <OptionBar>
         <Search on:search={handleSearch}/>
@@ -184,7 +221,7 @@
                     favorite={proxy.favorite}
                     on:dblclick={() => connectToProxy(proxy.id)}>
                 <svelte:fragment slot="subtitle">
-                    <span class="subtitle">{proxy.ipInfo?.org}</span>
+                    <span class="subtitle">{proxy.ipInfo?.org ?? "Unknown"}</span>
                 </svelte:fragment>
 
                 <svelte:fragment slot="tag">
@@ -196,6 +233,7 @@
                     <MenuListItemButton title="Check" icon="check" on:click={() => checkProxy(proxy.id)}/>
                     <MenuListItemButton title="Favorite" icon={proxy.favorite ? "favorite-filled" : "favorite" }
                                         on:click={() => toggleFavorite(proxy.id, !proxy.favorite)}/>
+                    <MenuListItemButton title="Edit" icon="pen-2" on:click={() => editProxy(proxy)}/>
                 </svelte:fragment>
 
                 <svelte:fragment slot="always-visible">
@@ -216,7 +254,7 @@
         </ButtonContainer>
 
         <ButtonContainer>
-            <IconTextButton icon="icon-back.svg" title="Back" on:click={() => openScreen("title")}/>
+            <IconTextButton icon="icon-back.svg" title="Back" on:click={() => deleteScreen()}/>
         </ButtonContainer>
     </BottomButtonWrapper>
 </Menu>

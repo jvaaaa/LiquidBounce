@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015-2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,18 +20,18 @@
  */
 package net.ccbluex.liquidbounce.features.module.modules.movement.speed.modes.spartan
 
-import net.ccbluex.liquidbounce.config.Choice
-import net.ccbluex.liquidbounce.config.ChoiceConfigurable
+import net.ccbluex.liquidbounce.config.types.Choice
+import net.ccbluex.liquidbounce.config.types.ChoiceConfigurable
 import net.ccbluex.liquidbounce.event.events.PlayerJumpEvent
 import net.ccbluex.liquidbounce.event.events.PlayerPostTickEvent
 import net.ccbluex.liquidbounce.event.handler
-import net.ccbluex.liquidbounce.event.repeatable
+import net.ccbluex.liquidbounce.event.tickHandler
 import net.ccbluex.liquidbounce.features.module.modules.movement.speed.ModuleSpeed
 import net.ccbluex.liquidbounce.utils.client.Timer
 import net.ccbluex.liquidbounce.utils.entity.moving
-import net.ccbluex.liquidbounce.utils.entity.strafe
+import net.ccbluex.liquidbounce.utils.entity.withStrafe
 import net.ccbluex.liquidbounce.utils.kotlin.Priority
-import net.ccbluex.liquidbounce.utils.movement.zeroXZ
+import net.ccbluex.liquidbounce.utils.movement.stopXZVelocity
 
 
 /**
@@ -40,28 +40,27 @@ import net.ccbluex.liquidbounce.utils.movement.zeroXZ
  * @testedOn minecraft.vagdedes.com
  * @note it might flag a bit at the start, but then stops for some reason
  */
-object SpeedSpartan524 : Choice("Spartan524") {
-    override val parent: ChoiceConfigurable<Choice>
-        get() = ModuleSpeed.modes
+class SpeedSpartan524(override val parent: ChoiceConfigurable<*>) : Choice("Spartan524") {
 
-    val repeatable = repeatable {
+    @Suppress("unused")
+    private val tickHandler = tickHandler {
         if (!player.moving) {
-            return@repeatable
+            return@tickHandler
         }
 
         Timer.requestTimerSpeed(1.1f, Priority.IMPORTANT_FOR_USAGE_1, ModuleSpeed)
 
         when {
             player.isOnGround -> {
-                player.strafe(speed = 0.83)
+                player.velocity = player.velocity.withStrafe(speed = 0.83)
                 player.velocity.y = 0.16
             }
         }
-        player.strafe()
+        player.velocity = player.velocity.withStrafe()
     }
 
     override fun enable() {
-        player.zeroXZ()
+        player.stopXZVelocity()
         player.velocity.y = 0.0
     }
 }
@@ -72,10 +71,9 @@ object SpeedSpartan524 : Choice("Spartan524") {
  * @testedOn minecraft.vagdedes.com
  * @note it will flag you for jumping
  */
-object SpeedSpartan524GroundTimer : Choice("Spartan524GroundTimer") {
-    val additionalTicks by int("AdditionalTicks", 2, 1..10, "ticks")
-    override val parent: ChoiceConfigurable<Choice>
-        get() = ModuleSpeed.modes
+class SpeedSpartan524GroundTimer(override val parent: ChoiceConfigurable<*>) : Choice("Spartan524GroundTimer") {
+
+    private val additionalTicks by int("AdditionalTicks", 2, 1..10, "ticks")
 
     val repeatable = handler<PlayerPostTickEvent> {
         repeat(additionalTicks) {

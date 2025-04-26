@@ -1,16 +1,17 @@
 package net.ccbluex.liquidbounce.features.module.modules.render.murdermystery
 
-import net.ccbluex.liquidbounce.config.Choice
-import net.ccbluex.liquidbounce.config.ChoiceConfigurable
+import net.ccbluex.liquidbounce.config.types.Choice
 import net.ccbluex.liquidbounce.event.events.PacketEvent
 import net.ccbluex.liquidbounce.event.handler
-import net.ccbluex.liquidbounce.event.repeatable
+import net.ccbluex.liquidbounce.event.tickHandler
 import net.ccbluex.liquidbounce.utils.client.chat
 import net.ccbluex.liquidbounce.utils.math.levenshtein
 import net.minecraft.client.network.AbstractClientPlayerEntity
 import net.minecraft.client.network.ClientPlayerEntity
 import net.minecraft.client.network.PlayerListEntry
 import net.minecraft.client.world.ClientWorld
+import net.minecraft.component.DataComponentTypes
+import net.minecraft.component.type.MapIdComponent
 import net.minecraft.item.FilledMapItem
 import net.minecraft.network.packet.s2c.play.PlaySoundS2CPacket
 import net.minecraft.util.Identifier
@@ -18,12 +19,12 @@ import java.util.*
 import kotlin.math.absoluteValue
 
 object MurderMysteryAssassinationMode : Choice("Assassination"), MurderMysteryMode {
-    override val parent: ChoiceConfigurable<Choice>
+    override val parent
         get() = ModuleMurderMystery.modes
 
-    private var lastMap: String? = null
-    private var currentAssasinationTarget: UUID? = null
-    private var currentAssasin: UUID? = null
+    private var lastMap: MapIdComponent? = null
+    private var currentAssassinationTarget: UUID? = null
+    private var currentAssassin: UUID? = null
 
     val packetHandler =
         handler<PacketEvent> { packetEvent ->
@@ -43,13 +44,13 @@ object MurderMysteryAssassinationMode : Choice("Assassination"), MurderMysteryMo
                         (it.distanceTo(player) - expectedDistance).absoluteValue
                     } ?: return@handler
 
-                val newAssasin = probablyAssassin.gameProfile.id
+                val newAssassin = probablyAssassin.gameProfile.id
 
-                if (currentAssasin != newAssasin) {
+                if (currentAssassin != newAssassin) {
                     chat("Your Assassin: " + probablyAssassin.gameProfile.name)
                 }
 
-                currentAssasin = newAssasin
+                currentAssassin = newAssassin
             }
         }
 
@@ -59,7 +60,7 @@ object MurderMysteryAssassinationMode : Choice("Assassination"), MurderMysteryMo
     }
 
     val repeatable =
-        repeatable {
+        tickHandler {
             assassinModeBs(player, world)
         }
 
@@ -72,28 +73,30 @@ object MurderMysteryAssassinationMode : Choice("Assassination"), MurderMysteryMo
         val item = equippedItem?.item
 
         if (item !is FilledMapItem) {
+            // reset lastMap when map was removed (no longer in game)
+            lastMap = null
             return
         }
 
-        val mapName = FilledMapItem.getMapId(equippedItem)?.let { FilledMapItem.getMapName(it) }
-        val mapData = mapName?.let { world.getMapState(it) } ?: return
+        val mapId = equippedItem.get(DataComponentTypes.MAP_ID)
+        val mapState = mapId?.let { world.getMapState(it) } ?: return
 
-        if (mapName == lastMap) {
+        if (mapId == lastMap) {
             return
         }
 
-        lastMap = mapName
+        lastMap = mapId
 
-        val outs = MurderMysteryFontDetection.readContractLine(mapData)
+        val outs = MurderMysteryFontDetection.readContractLine(mapState)
 
-        val s = outs.split(" ").toTypedArray()
+        val s = outs.split(' ').toTypedArray()
 
         if (s.isNotEmpty() && s[0].startsWith("NAME:")) {
             val target = s[0].substring("NAME:".length).lowercase(Locale.getDefault()).trim()
             val targetPlayer = findPlayerWithClosestName(target, player)
 
             if (targetPlayer != null) {
-                currentAssasinationTarget = targetPlayer.profile.id
+                currentAssassinationTarget = targetPlayer.profile.id
 
                 chat("Target: " + targetPlayer.profile.name)
             } else {
@@ -131,7 +134,7 @@ object MurderMysteryAssassinationMode : Choice("Assassination"), MurderMysteryMo
     }
 
     override fun getPlayerType(player: AbstractClientPlayerEntity): MurderMysteryMode.PlayerType {
-        if (player.gameProfile.id == currentAssasinationTarget || player.gameProfile.id == currentAssasin) {
+        if (player.gameProfile.id == currentAssassinationTarget || player.gameProfile.id == currentAssassin) {
             return MurderMysteryMode.PlayerType.MURDERER
         }
 
@@ -139,7 +142,7 @@ object MurderMysteryAssassinationMode : Choice("Assassination"), MurderMysteryMo
     }
 
     override fun reset() {
-        this.currentAssasinationTarget = null
-        this.currentAssasin = null
+        this.currentAssassinationTarget = null
+        this.currentAssassin = null
     }
 }

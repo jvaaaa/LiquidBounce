@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015 - 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,12 +18,13 @@
  */
 package net.ccbluex.liquidbounce.features.module.modules.world.scaffold.tower
 
-import net.ccbluex.liquidbounce.config.Choice
-import net.ccbluex.liquidbounce.config.ChoiceConfigurable
+import net.ccbluex.liquidbounce.config.types.Choice
+import net.ccbluex.liquidbounce.config.types.ChoiceConfigurable
 import net.ccbluex.liquidbounce.event.events.PlayerJumpEvent
 import net.ccbluex.liquidbounce.event.sequenceHandler
+import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ModuleScaffold.isBlockBelow
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ModuleScaffold.towerMode
-import net.ccbluex.liquidbounce.utils.kotlin.EventPriorityConvention
+import net.ccbluex.liquidbounce.utils.kotlin.EventPriorityConvention.READ_FINAL_STATE
 
 object ScaffoldTowerPulldown : Choice("Pulldown") {
 
@@ -32,13 +33,15 @@ object ScaffoldTowerPulldown : Choice("Pulldown") {
     override val parent: ChoiceConfigurable<Choice>
         get() = towerMode
 
-    val jumpHandler = sequenceHandler<PlayerJumpEvent>(priority = EventPriorityConvention.READ_FINAL_STATE) { event ->
+    @Suppress("unused")
+    private val jumpHandler = sequenceHandler<PlayerJumpEvent>(priority = READ_FINAL_STATE) { event ->
         if (event.motion == 0f || event.isCancelled) {
             return@sequenceHandler
         }
 
         // Wait until we can proceed with our tower
         waitUntil { player.velocity.y < triggerMotion && !player.isOnGround }
+        if (!isBlockBelow) return@sequenceHandler
 
         player.velocity.y = -1.0
     }

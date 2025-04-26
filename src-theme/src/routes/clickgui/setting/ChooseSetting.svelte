@@ -1,9 +1,7 @@
 <script lang="ts">
-    import { createEventDispatcher } from "svelte";
-    import type {
-        ModuleSetting,
-        ChooseSetting,
-    } from "../../../integration/types";
+    import {createEventDispatcher} from "svelte";
+    import type {ChooseSetting, ModuleSetting,} from "../../../integration/types";
+    import {convertToSpacedString, spaceSeperatedNames} from "../../../theme/theme_config";
     import Dropdown from "./common/Dropdown.svelte";
 
     export let setting: ModuleSetting;
@@ -23,7 +21,7 @@
         on:change={handleChange}
         bind:value={cSetting.value}
         options={cSetting.choices}
-        name={cSetting.name}
+        name={$spaceSeperatedNames ? convertToSpacedString(cSetting.name) : cSetting.name}
     />
 </div>
 

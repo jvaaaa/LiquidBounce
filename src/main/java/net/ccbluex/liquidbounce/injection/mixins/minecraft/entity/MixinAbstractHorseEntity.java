@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,24 +18,20 @@
  *
  *
  */
-
 package net.ccbluex.liquidbounce.injection.mixins.minecraft.entity;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import net.ccbluex.liquidbounce.features.module.modules.movement.ModuleEntityControl;
 import net.minecraft.entity.passive.AbstractHorseEntity;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 @Mixin(AbstractHorseEntity.class)
 public class MixinAbstractHorseEntity {
 
-    @Inject(method = "isSaddled", at = @At("HEAD"), cancellable = true)
-    private void isSaddled(CallbackInfoReturnable<Boolean> cir) {
-        if (ModuleEntityControl.INSTANCE.getEnabled() && ModuleEntityControl.INSTANCE.getEnforceSaddled()) {
-            cir.setReturnValue(true);
-        }
+    @ModifyReturnValue(method = "isSaddled", at = @At("RETURN"))
+    private boolean isSaddled(boolean original) {
+        return ModuleEntityControl.getEnforceSaddled() || original;
     }
 
 }

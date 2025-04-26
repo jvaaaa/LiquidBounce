@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015 - 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,18 +18,19 @@
  */
 package net.ccbluex.liquidbounce.config
 
-import com.google.gson.*
-import com.google.gson.reflect.TypeToken
+import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
+import com.google.gson.JsonParser
 import net.ccbluex.liquidbounce.LiquidBounce
-import net.ccbluex.liquidbounce.authlib.account.MinecraftAccount
-import net.ccbluex.liquidbounce.config.adapter.*
-import net.ccbluex.liquidbounce.config.util.ExcludeStrategy
-import net.ccbluex.liquidbounce.render.Fonts
-import net.ccbluex.liquidbounce.render.engine.Color4b
+import net.ccbluex.liquidbounce.config.gson.fileGson
+import net.ccbluex.liquidbounce.config.types.ChoiceConfigurable
+import net.ccbluex.liquidbounce.config.types.Configurable
+import net.ccbluex.liquidbounce.config.types.DynamicConfigurable
+import net.ccbluex.liquidbounce.config.types.Value
 import net.ccbluex.liquidbounce.utils.client.logger
 import net.ccbluex.liquidbounce.utils.client.mc
-import net.minecraft.block.Block
-import net.minecraft.item.Item
+import net.ccbluex.liquidbounce.utils.io.createZipArchive
 import java.io.File
 import java.io.Reader
 import java.io.Writer
@@ -39,28 +40,20 @@ import java.io.Writer
  *
  * @author kawaiinekololis (@team ccbluex)
  */
+@Suppress("TooManyFunctions")
 object ConfigSystem {
 
-    /*    init {
-            // Delete the config folder if we are integration testing.
-            if (LiquidBounce.isIntegrationTesting) {
-                File(mc.runDirectory, "${LiquidBounce.CLIENT_NAME}_tenacc_test/configs").deleteRecursively()
-            }
-        }*/
-
-    private val clientDirectoryName = if (LiquidBounce.isIntegrationTesting) {
-        "${LiquidBounce.CLIENT_NAME}_tenacc_test"
-    } else {
-        LiquidBounce.CLIENT_NAME
-    }
+    var isFirstLaunch: Boolean = false
+        private set
 
     // Config directory folder
     val rootFolder = File(
-        mc.runDirectory, clientDirectoryName
+        mc.runDirectory, LiquidBounce.CLIENT_NAME
     ).apply {
         // Check if there is already a config folder and if not create new folder
         // (mkdirs not needed - .minecraft should always exist)
         if (!exists()) {
+            isFirstLaunch = true
             mkdir()
         }
     }
@@ -77,49 +70,23 @@ object ConfigSystem {
     }
 
     // A mutable list of all root configurable classes (and their subclasses)
-    private val configurables: MutableList<Configurable> = mutableListOf()
-
-    // Gson
-    private val confType = TypeToken.get(Configurable::class.java).type
-    private val clientGson: Gson = GsonBuilder()
-        .addSerializationExclusionStrategy(ExcludeStrategy())
-        .registerCommonTypeAdapters()
-        .registerTypeHierarchyAdapter(Configurable::class.javaObjectType, ConfigurableSerializer)
-        .create()
-    val autoConfigGson: Gson = GsonBuilder()
-        .setPrettyPrinting()
-        .addSerializationExclusionStrategy(ExcludeStrategy())
-        .registerCommonTypeAdapters()
-        // A configurable serializer which will not include values with doNotInclude = true
-        .registerTypeHierarchyAdapter(Configurable::class.javaObjectType, AutoConfigurableSerializer)
-        .create()
-
-    /**
-     * Register common type adapters
-     * These adapters include anything from Kotlin classes to Minecraft and LiquidBounce types
-     * They are safe to use on any GSON instance. (clientGson, autoConfigGson, ...)
-     * It does not include any configurable serializers, which means you need to add them yourself if needed!
-     *
-     * @see GsonBuilder.registerTypeHierarchyAdapter
-     * @see GsonBuilder.registerTypeAdapter
-     */
-    internal fun GsonBuilder.registerCommonTypeAdapters() =
-        registerTypeHierarchyAdapter(ClosedRange::class.javaObjectType, RangeSerializer)
-            .registerTypeAdapter(IntRange::class.javaObjectType, IntRangeSerializer)
-            .registerTypeHierarchyAdapter(Item::class.javaObjectType, ItemValueSerializer)
-            .registerTypeAdapter(Color4b::class.javaObjectType, ColorSerializer)
-            .registerTypeHierarchyAdapter(Block::class.javaObjectType, BlockValueSerializer)
-            .registerTypeAdapter(Fonts.FontInfo::class.javaObjectType, FontDetailSerializer)
-            .registerTypeAdapter(ChoiceConfigurable::class.javaObjectType, ChoiceConfigurableSerializer)
-            .registerTypeHierarchyAdapter(NamedChoice::class.javaObjectType, EnumChoiceSerializer)
-            .registerTypeHierarchyAdapter(MinecraftAccount::class.javaObjectType, MinecraftAccountSerializer)
+    private val configurables = ArrayList<Configurable>()
 
     /**
      * Create new root configurable
      */
     fun root(name: String, tree: MutableList<out Configurable> = mutableListOf()): Configurable {
         @Suppress("UNCHECKED_CAST")
-        return root(Configurable(name, tree as MutableList<Value<*>>))
+        return root(Configurable(name, value = tree as MutableList<Value<*>>))
+    }
+
+    fun dynamic(
+        name: String,
+        tree: MutableList<out Configurable> = mutableListOf(),
+        factory: (String, JsonObject) -> Value<*>
+    ): Configurable {
+        @Suppress("UNCHECKED_CAST")
+        return root(DynamicConfigurable(name, tree as MutableList<Value<*>>, factory))
     }
 
     /**
@@ -131,19 +98,34 @@ object ConfigSystem {
         return configurable
     }
 
+    val Configurable.jsonFile: File
+        get() {
+            require(this in configurables) { "${this.name} is not root configurable" }
+            return File(rootFolder, "${this.loweredName}.json")
+        }
+
+    /**
+     * Create a ZIP file of root configurable files
+     */
+    fun backup(fileName: String) = runCatching {
+        configurables.map { it.jsonFile }.createZipArchive(File(rootFolder, fileName))
+    }.onFailure {
+        logger.error("Unable to create backup", it)
+    }
+
     /**
      * All configurables should load now.
      */
     fun loadAll() {
         for (configurable in configurables) { // Make a new .json file to save our root configurable
-            File(rootFolder, "${configurable.loweredName}.json").runCatching {
+            configurable.jsonFile.runCatching {
                 if (!exists()) {
                     // Do not try to load a non-existing file
                     return@runCatching
                 }
 
                 logger.debug("Reading config ${configurable.loweredName}...")
-                deserializeConfigurable(configurable, reader())
+                deserializeConfigurable(configurable, bufferedReader())
             }.onSuccess {
                 logger.info("Successfully loaded config '${configurable.loweredName}'.")
             }.onFailure {
@@ -171,13 +153,13 @@ object ConfigSystem {
      * The configurable should be known to the config system.
      */
     fun storeConfigurable(configurable: Configurable) { // Make a new .json file to save our root configurable
-        File(rootFolder, "${configurable.loweredName}.json").runCatching {
+        configurable.jsonFile.runCatching {
             if (!exists()) {
                 createNewFile().let { logger.debug("Created new file (status: $it)") }
             }
 
             logger.debug("Writing config ${configurable.loweredName}...")
-            serializeConfigurable(configurable, writer())
+            serializeConfigurable(configurable, bufferedWriter())
             logger.info("Successfully saved config '${configurable.loweredName}'.")
         }.onFailure {
             logger.error("Unable to store config ${configurable.loweredName}", it)
@@ -187,22 +169,22 @@ object ConfigSystem {
     /**
      * Serialize a configurable to a writer
      */
-    private fun serializeConfigurable(configurable: Configurable, writer: Writer, gson: Gson = this.clientGson) {
+    private fun serializeConfigurable(configurable: Configurable, writer: Writer, gson: Gson = fileGson) {
         gson.newJsonWriter(writer).use {
-            gson.toJson(configurable, confType, it)
+            gson.toJson(configurable, Configurable::class.javaObjectType, it)
         }
     }
 
     /**
      * Serialize a configurable to a writer
      */
-    fun serializeConfigurable(configurable: Configurable, gson: Gson = this.clientGson) =
-        gson.toJsonTree(configurable, confType)
+    fun serializeConfigurable(configurable: Configurable, gson: Gson = fileGson) =
+        gson.toJsonTree(configurable, Configurable::class.javaObjectType)
 
     /**
      * Deserialize a configurable from a reader
      */
-    fun deserializeConfigurable(configurable: Configurable, reader: Reader, gson: Gson = this.clientGson) {
+    fun deserializeConfigurable(configurable: Configurable, reader: Reader, gson: Gson = fileGson) {
         JsonParser.parseReader(gson.newJsonReader(reader))?.let {
             deserializeConfigurable(configurable, it)
         }
@@ -214,20 +196,44 @@ object ConfigSystem {
     fun deserializeConfigurable(configurable: Configurable, jsonElement: JsonElement) {
         val jsonObject = jsonElement.asJsonObject
 
-        // Handle auto config
-        AutoConfig.handlePossibleAutoConfig(jsonObject)
-
         // Check if the name is the same as the configurable name
-        check(jsonObject.getAsJsonPrimitive("name").asString == configurable.name)
+        val name = jsonObject.getAsJsonPrimitive("name").asString
+        check(name == configurable.name || configurable.aliases.contains(name)) {
+            "Configurable name does not match the name in the json object"
+        }
 
-        val values = jsonObject.getAsJsonArray("value").map {
-            it.asJsonObject
-        }.associateBy { it["name"].asString!! }
+        val values = jsonObject.getAsJsonArray("value")
+            .map { valueElement -> valueElement.asJsonObject }
+            .associateBy { valueObj -> valueObj["name"].asString!! }
 
-        for (value in configurable.inner) {
-            val currentElement = values[value.name] ?: continue
+        when (configurable) {
 
-            deserializeValue(value, currentElement)
+            // On a dynamic configurable, we first create an instance of the value and then deserialize it
+            is DynamicConfigurable -> {
+                if (values.isNotEmpty()) {
+                    // Clear the current values
+                    configurable.inner.clear()
+                }
+
+                for ((name, value) in values) {
+                    val valueInstance = configurable.factory(name, value)
+                    configurable.value(valueInstance)
+
+                    deserializeValue(valueInstance, value)
+                }
+            }
+
+            // On an ordinary configurable, we simply deserialize the values that are present
+            else -> {
+                for (value in configurable.inner) {
+                    val currentElement = values[value.name]
+                        // Alias support
+                        ?: values.entries.firstOrNull { entry -> entry.key in value.aliases }?.value
+                        ?: continue
+
+                    deserializeValue(value, currentElement)
+                }
+            }
         }
     }
 
@@ -235,7 +241,7 @@ object ConfigSystem {
      * Deserialize a value from a json object
      */
     private fun deserializeValue(value: Value<*>, jsonObject: JsonObject) {
-        // In case of a configurable, we need to go deeper and deserialize the configurable itself
+        // In the case of a configurable, we need to go deeper and deserialize the configurable itself
         if (value is Configurable) {
             runCatching {
                 if (value is ChoiceConfigurable<*>) {
@@ -252,6 +258,8 @@ object ConfigSystem {
                     for (choice in value.choices) {
                         runCatching {
                             val choiceElement = choices[choice.name]
+                                // Alias support
+                                ?: choice.aliases.firstNotNullOfOrNull { alias -> choices[alias] }
                                 ?: error("Choice ${choice.name} not found")
 
                             deserializeConfigurable(choice, choiceElement)
@@ -270,9 +278,9 @@ object ConfigSystem {
             return
         }
 
-        // Otherwise we simply deserialize the value
+        // Otherwise, we simply deserialize the value
         runCatching {
-            value.deserializeFrom(clientGson, jsonObject["value"])
+            value.deserializeFrom(fileGson, jsonObject["value"])
         }.onFailure {
             logger.error("Unable to deserialize value ${value.name}", it)
         }

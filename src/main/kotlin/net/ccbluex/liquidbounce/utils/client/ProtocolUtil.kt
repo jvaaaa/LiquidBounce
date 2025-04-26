@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015-2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -20,28 +20,26 @@
  */
 package net.ccbluex.liquidbounce.utils.client
 
-import net.ccbluex.liquidbounce.utils.client.vfp.Vfp306Compatibility
+import com.mojang.blaze3d.systems.RenderSystem
+import com.viaversion.viafabricplus.ViaFabricPlus
 import net.ccbluex.liquidbounce.utils.client.vfp.VfpCompatibility
+import net.ccbluex.liquidbounce.utils.client.vfp.VfpCompatibility1_8
 import net.minecraft.SharedConstants
+import net.minecraft.item.ItemStack
+import net.minecraft.util.math.BlockPos
 
 // Only runs once
 val usesViaFabricPlus = runCatching {
-    Class.forName("de.florianmichael.viafabricplus.ViaFabricPlus")
-    true
-}.getOrDefault(false)
+    Class.forName("com.viaversion.viafabricplus.ViaFabricPlus")
 
-val hasProtocolHack = runCatching {
-    Class.forName("de.florianmichael.viafabricplus.protocolhack.ProtocolHack")
-    true
-}.getOrDefault(false)
+    // Register ViaFabricPlus protocol version change callback
+    ViaFabricPlus.getImpl().registerOnChangeProtocolVersionCallback { _, _ ->
+        // Update the window title
+        RenderSystem.recordRenderCall {
+            mc.updateWindowTitle()
+        }
+    }
 
-val hasProtocolTranslator = runCatching {
-    Class.forName("de.florianmichael.viafabricplus.protocoltranslator.ProtocolTranslator")
-    true
-}.getOrDefault(false)
-
-val hasVisualSettings = runCatching {
-    Class.forName("de.florianmichael.viafabricplus.settings.impl.VisualSettings")
     true
 }.getOrDefault(false)
 
@@ -54,10 +52,8 @@ val defaultProtocolVersion = ClientProtocolVersion(SharedConstants.getGameVersio
 val protocolVersion: ClientProtocolVersion
     get() = runCatching {
         // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-        if (hasProtocolTranslator) {
+        if (usesViaFabricPlus) {
             return@runCatching VfpCompatibility.INSTANCE.unsafeGetProtocolVersion()
-        } else if (hasProtocolHack) {
-            return@runCatching Vfp306Compatibility.INSTANCE.unsafeGetProtocolVersion()
         } else {
             return@runCatching defaultProtocolVersion
         }
@@ -68,10 +64,8 @@ val protocolVersion: ClientProtocolVersion
 val protocolVersions: Array<ClientProtocolVersion>
     get() = runCatching {
         // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-        if (hasProtocolTranslator) {
+        if (usesViaFabricPlus) {
             return@runCatching VfpCompatibility.INSTANCE.unsafeGetProtocolVersions()
-        } else if (hasProtocolHack) {
-            return@runCatching Vfp306Compatibility.INSTANCE.unsafeGetProtocolVersions()
         } else {
             return@runCatching arrayOf(defaultProtocolVersion)
         }
@@ -81,28 +75,50 @@ val protocolVersions: Array<ClientProtocolVersion>
 
 data class ClientProtocolVersion(val name: String, val version: Int)
 
-val isOldCombat: Boolean
+val isEqual1_8: Boolean
     get() = runCatching {
         // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-        if (hasProtocolTranslator) {
-            return@runCatching VfpCompatibility.INSTANCE.isOldCombat
-        } else if (hasProtocolHack) {
-            return@runCatching Vfp306Compatibility.INSTANCE.isOldCombat
-        } else {
-            return@runCatching false
-        }
+        usesViaFabricPlus && VfpCompatibility.INSTANCE.isEqual1_8
     }.onFailure {
         logger.error("Failed to check if the server is using old combat", it)
     }.getOrDefault(false)
 
+val isOlderThanOrEqual1_8: Boolean
+    get() = runCatching {
+        // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
+        usesViaFabricPlus && VfpCompatibility.INSTANCE.isOlderThanOrEqual1_8
+    }.onFailure {
+        logger.error("Failed to check if the server is using old combat", it)
+    }.getOrDefault(false)
 
+val isOlderThanOrEquals1_7_10: Boolean
+    get() = runCatching {
+        // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
+        usesViaFabricPlus && VfpCompatibility.INSTANCE.isOlderThanOrEqual1_7_10
+    }.onFailure {
+        logger.error("Failed to check if the server is using 1.7.10", it)
+    }.getOrDefault(false)
+
+val isNewerThanOrEquals1_16: Boolean
+    get() = runCatching {
+        // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
+        usesViaFabricPlus && VfpCompatibility.INSTANCE.isNewerThanOrEqual1_16
+    }.onFailure {
+        logger.error("Failed to check if the server is using 1.16+", it)
+    }.getOrDefault(false)
+
+val isOlderThanOrEqual1_11_1: Boolean
+    get() = runCatching {
+        // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
+        usesViaFabricPlus && VfpCompatibility.INSTANCE.isOlderThanOrEqual1_11_1
+    }.onFailure {
+        logger.error("Failed to check if the server is using 1.11.1", it)
+    }.getOrDefault(false)
 
 fun selectProtocolVersion(protocolId: Int) {
     // Check if the ViaFabricPlus mod is loaded - prevents from causing too many exceptions
-    if (hasProtocolTranslator) {
+    if (usesViaFabricPlus) {
         VfpCompatibility.INSTANCE.unsafeSelectProtocolVersion(protocolId)
-    } else if (hasProtocolHack) {
-        Vfp306Compatibility.INSTANCE.unsafeSelectProtocolVersion(protocolId)
     } else {
         error("ViaFabricPlus is not loaded")
     }
@@ -118,12 +134,17 @@ fun openVfpProtocolSelection() {
     VfpCompatibility.INSTANCE.unsafeOpenVfpProtocolSelection()
 }
 
-fun disableConflictingVfpOptions() {
-    // Check if the ViaFabricPlus mod is loaded
-    if (!usesViaFabricPlus || !hasVisualSettings) {
-        return
-    }
+fun send1_8SignUpdate(blockPos: BlockPos, lines: Array<String>) {
+    require(usesViaFabricPlus) { "ViaFabricPlus is missing" }
+    require(isEqual1_8) { "Not 1.8 protocol" }
 
-    VfpCompatibility.INSTANCE.unsafeDsableConflictingVfpOptions()
+    VfpCompatibility1_8.INSTANCE.sendSignUpdate(blockPos, lines)
 }
 
+fun send1_8BlockPlacement(blockPos: BlockPos, face: Int, heldItem: ItemStack,
+                          facingXIn: Float, facingYIn: Float, facingZIn: Float) {
+    require(usesViaFabricPlus) { "ViaFabricPlus is missing" }
+    require(isEqual1_8) { "Not 1.8 protocol" }
+
+    VfpCompatibility1_8.INSTANCE.sendBlockPlacement(blockPos, face, heldItem, facingXIn, facingYIn, facingZIn)
+}

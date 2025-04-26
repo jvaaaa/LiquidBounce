@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,8 +21,8 @@
 
 package net.ccbluex.liquidbounce.features.module.modules.movement.fly.modes.vulcan
 
-import net.ccbluex.liquidbounce.config.Choice
-import net.ccbluex.liquidbounce.config.ChoiceConfigurable
+import net.ccbluex.liquidbounce.config.types.Choice
+import net.ccbluex.liquidbounce.config.types.ChoiceConfigurable
 import net.ccbluex.liquidbounce.event.events.BlockShapeEvent
 import net.ccbluex.liquidbounce.event.events.PacketEvent
 import net.ccbluex.liquidbounce.event.events.PlayerMoveEvent
@@ -61,17 +61,25 @@ internal object FlyVulcan286 : Choice("Vulcan286-113") {
         chat(regular(message("vulcanGhostNewMessage")))
 
         // Send Packet to desync
-        network.sendPacket(PlayerMoveC2SPacket.Full(player.x, player.y - 0.1, player.z,
-            player.yaw, player.pitch, player.isOnGround))
+        network.sendPacket(
+            PlayerMoveC2SPacket.Full(
+                player.x, player.y - 0.1, player.z,
+                player.yaw, player.pitch, player.isOnGround, player.horizontalCollision
+            )
+        )
     }
 
     override fun disable() {
-        handlePacket(packet!!)
+        packet?.let {
+            handlePacket(it)
+        }
     }
 
     val tickHandler = handler<PlayerTickEvent> {
         if (mc.options.useKey.isPressed) {
-            handlePacket(packet!!)
+            packet?.let {
+                handlePacket(it)
+            }
             packet = null
             wait = true
         }
@@ -84,13 +92,12 @@ internal object FlyVulcan286 : Choice("Vulcan286-113") {
         }
     }
 
-    val packetHandler = handler<PacketEvent> {
-        if (it.packet is PlayerPositionLookS2CPacket) {
+    val packetHandler = handler<PacketEvent> { event ->
+        if (event.packet is PlayerPositionLookS2CPacket) {
             flags++
-
             if (flags == 1) {
-                packet = it.packet
-                it.cancelEvent()
+                packet = event.packet
+                event.cancelEvent()
             } else {
                 ModuleFly.enabled = false
             }

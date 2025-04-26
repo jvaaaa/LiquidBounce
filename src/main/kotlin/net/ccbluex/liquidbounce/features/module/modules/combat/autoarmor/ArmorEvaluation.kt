@@ -1,9 +1,9 @@
 package net.ccbluex.liquidbounce.features.module.modules.combat.autoarmor
 
-import net.ccbluex.liquidbounce.features.module.modules.player.invcleaner.ItemSlot
-import net.ccbluex.liquidbounce.utils.item.ALL_SLOTS_IN_INVENTORY
+import net.ccbluex.liquidbounce.utils.inventory.ItemSlot
+import net.ccbluex.liquidbounce.utils.inventory.Slots
 import net.ccbluex.liquidbounce.utils.item.ArmorComparator
-import net.ccbluex.liquidbounce.utils.item.ArmorParameter
+import net.ccbluex.liquidbounce.utils.item.ArmorKitParameters
 import net.ccbluex.liquidbounce.utils.item.ArmorPiece
 import net.minecraft.entity.EquipmentSlot
 import net.minecraft.item.ArmorItem
@@ -15,18 +15,19 @@ object ArmorEvaluation {
     private const val EXPECTED_DAMAGE: Float = 6.0F
 
     fun findBestArmorPieces(
-        slots: List<ItemSlot> = ALL_SLOTS_IN_INVENTORY
+        slots: List<ItemSlot> = Slots.All,
+        durabilityThreshold: Int = Int.MIN_VALUE
     ): Map<EquipmentSlot, ArmorPiece?> {
         val armorPiecesGroupedByType = groupArmorByType(slots)
 
         // We start with assuming that the best pieces are those which have the most damage points.
         var currentBestPieces = armorPiecesGroupedByType.mapValues { (_, piecesForType) ->
-            piecesForType.maxByOrNull { it.toughness.toDouble() }
+            piecesForType.maxByOrNull { it.toughness }
         }
 
         // Run some passes in which we try to find best armor pieces based on the parameters of the last pass
         for (ignored in 0 until 2) {
-            val comparator = getArmorComparatorFor(currentBestPieces)
+            val comparator = getArmorComparatorFor(currentBestPieces, durabilityThreshold)
 
             currentBestPieces = armorPiecesGroupedByType.mapValues { it.value.maxWithOrNull(comparator) }
         }
@@ -35,7 +36,7 @@ object ArmorEvaluation {
     }
 
     fun findBestArmorPiecesWithComparator(
-        slots: List<ItemSlot> = ALL_SLOTS_IN_INVENTORY,
+        slots: List<ItemSlot> = Slots.All,
         comparator: ArmorComparator
     ): Map<EquipmentSlot, ArmorPiece?> {
         val armorPiecesGroupedByType = groupArmorByType(slots)
@@ -45,50 +46,33 @@ object ArmorEvaluation {
 
     private fun groupArmorByType(slots: List<ItemSlot>): Map<EquipmentSlot, List<ArmorPiece>> {
         val armorPiecesGroupedByType = slots.mapNotNull { slot ->
-            return@mapNotNull when (slot.itemStack.item) {
+            when (slot.itemStack.item) {
+                // Filter out animal armor which is an armor item but not for the player
+                // Note: in 1.21.4 [AnimalArmorItem] is not a subclass of [ArmorItem]
                 is ArmorItem -> ArmorPiece(slot)
                 else -> null
             }
         }.groupBy(ArmorPiece::slotType)
+
         return armorPiecesGroupedByType
     }
 
-    fun getArmorComparatorFor(currentKit: Map<EquipmentSlot, ArmorPiece?>): ArmorComparator {
-        return getArmorComparatorForParameters(getParametersForSlots(currentKit))
+    fun getArmorComparatorFor(
+        currentKit: Map<EquipmentSlot, ArmorPiece?>,
+        durabilityThreshold: Int = Int.MIN_VALUE
+    ): ArmorComparator {
+        return getArmorComparatorForParameters(
+            ArmorKitParameters.getParametersForSlots(currentKit),
+            durabilityThreshold
+        )
     }
 
-    fun getArmorComparatorForParameters(currentParameters: Map<EquipmentSlot, ArmorParameter>): ArmorComparator {
-        return ArmorComparator(EXPECTED_DAMAGE, currentParameters)
+    fun getArmorComparatorForParameters(
+        currentParameters: ArmorKitParameters,
+        durabilityThreshold: Int = Int.MIN_VALUE
+    ): ArmorComparator {
+        return ArmorComparator(EXPECTED_DAMAGE, currentParameters, durabilityThreshold)
     }
 
-    /**
-     * Returns for each slot the summed up armor parameters without that slot.
-     */
-    private fun getParametersForSlots(currentKit: Map<EquipmentSlot, ArmorPiece?>): Map<EquipmentSlot, ArmorParameter> {
-        // Sum up all parameters
-        val totalArmorParameter =
-            currentKit.values.fold(ArmorParameter(0.0F, 0.0F)) { acc, armorPiece ->
-                if (armorPiece != null) {
-                    ArmorParameter(
-                        acc.defensePoints + armorPiece.defensePoints,
-                        acc.toughness + armorPiece.toughness
-                    )
-                } else {
-                    acc
-                }
-            }
-
-        // Return the parameter sum for each slot without the current slot
-        return currentKit.mapValues { (_, armorPiece) ->
-            if (armorPiece != null) {
-                ArmorParameter(
-                    totalArmorParameter.defensePoints - armorPiece.defensePoints,
-                    totalArmorParameter.toughness - armorPiece.toughness
-                )
-            } else {
-                totalArmorParameter
-            }
-        }
-    }
 
 }

@@ -10,11 +10,14 @@
     import {slide} from "svelte/transition";
     import {quintOut} from "svelte/easing";
     import {description as descriptionStore, highlightModuleName} from "./clickgui_store";
-    import { setItem } from "../../integration/persistent_storage";
+    import {setItem} from "../../integration/persistent_storage";
+    import {convertToSpacedString, spaceSeperatedNames} from "../../theme/theme_config";
+    import {scaleFactor} from "./clickgui_store";
 
     export let name: string;
     export let enabled: boolean;
     export let description: string;
+    export let aliases: string[];
 
     let moduleNameElement: HTMLElement;
     let configurable: ConfigurableSetting;
@@ -29,8 +32,8 @@
         }, 500);
     });
 
-    highlightModuleName.subscribe(() => {
-        if (name !== $highlightModuleName) {
+    highlightModuleName.subscribe((m) => {
+        if (name !== m) {
             return;
         }
 
@@ -55,13 +58,35 @@
     }
 
     function setDescription() {
-        const y = (moduleNameElement?.getBoundingClientRect().top ?? 0) + ((moduleNameElement?.clientHeight ?? 0) / 2);
-        const x = moduleNameElement?.getBoundingClientRect().right ?? 0;
-        descriptionStore.set({
-            x,
-            y,
-            description
-        });
+        if (!moduleNameElement) return;
+
+        const boundingRect = moduleNameElement.getBoundingClientRect();
+        const y = (boundingRect.top + (moduleNameElement.clientHeight / 2)) * (2 / $scaleFactor);
+
+        let moduleDescription = description;
+        if (aliases.length > 0) {
+            moduleDescription += ` (aka ${aliases.map(name => $spaceSeperatedNames ? convertToSpacedString(name) : name).join(", ")})`;
+        }
+
+        // If element is less than 300px from the right, display description on the left
+        if (window.innerWidth - boundingRect.right > 300) {
+            const x = boundingRect.right * (2 / $scaleFactor);
+            descriptionStore.set({
+                x,
+                y,
+                anchor: "right",
+                description: moduleDescription
+            });
+        } else {
+            const x = boundingRect.left * (2 / $scaleFactor);
+
+            descriptionStore.set({
+                x,
+                y,
+                anchor: "left",
+                description: moduleDescription
+            });
+        }
     }
 
     async function toggleExpanded() {
@@ -89,20 +114,20 @@
             class:enabled
             class:highlight={name === $highlightModuleName}
     >
-        {name}
+        {$spaceSeperatedNames ? convertToSpacedString(name) : name}
     </div>
 
     {#if expanded && configurable}
         <div class="settings">
             {#each configurable.value as setting (setting.name)}
-                <GenericSetting skipAnimationDelay={true} {path} bind:setting on:change={updateModuleSettings}/>
+                <GenericSetting {path} bind:setting on:change={updateModuleSettings}/>
             {/each}
         </div>
     {/if}
 </div>
 
 <style lang="scss">
-  @import "../../colors.scss";
+  @use "../../colors.scss" as *;
 
   .module {
     position: relative;
@@ -140,7 +165,7 @@
     }
 
     .settings {
-      background-color: rgba($clickgui-base-color, 0.9);
+      background-color: rgba($clickgui-base-color, 0.5);
       border-left: solid 4px $accent-color;
       padding: 0 11px 0 7px;
     }

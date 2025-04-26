@@ -5,8 +5,7 @@
     import Tabs from "../../common/modal/Tabs.svelte";
     import CrackedAccountTab from "./CrackedAccountTab.svelte";
     import SessionAccountTab from "./SessionAccountTab.svelte";
-    import {createEventDispatcher} from "svelte";
-    import { setItem } from "../../../../integration/persistent_storage";
+    import {setItem} from "../../../../integration/persistent_storage";
 
     export let visible: boolean;
 

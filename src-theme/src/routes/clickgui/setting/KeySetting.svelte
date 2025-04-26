@@ -1,49 +1,34 @@
 <script lang="ts">
-    import {createEventDispatcher, onMount} from "svelte";
     import type {KeySetting, ModuleSetting} from "../../../integration/types";
-    import {listen} from "../../../integration/ws";
+    import {convertToSpacedString, spaceSeperatedNames} from "../../../theme/theme_config";
     import {getPrintableKeyName} from "../../../integration/rest";
-    import type {KeyboardKeyEvent} from "../../../integration/events";
+    import {createEventDispatcher} from "svelte";
+    import {listen} from "../../../integration/ws";
+    import type {KeyboardKeyEvent, MouseButtonEvent} from "../../../integration/events";
 
     export let setting: ModuleSetting;
 
     const cSetting = setting as KeySetting;
 
     const dispatch = createEventDispatcher();
+    const UNKNOWN_KEY = "key.keyboard.unknown";
 
+    let isHovered = false;
     let binding = false;
     let printableKeyName = "";
 
-    async function updatePrintableKeyName() {
-        if (cSetting.value === -1) {
-            return;
+    $: {
+        if (cSetting.value !== UNKNOWN_KEY) {
+            getPrintableKeyName(cSetting.value)
+                .then(printableKey => {
+                    printableKeyName = printableKey.localized;
+                });
         }
-        printableKeyName = (await getPrintableKeyName(cSetting.value)).localized;
     }
-
-    listen("keyboardKey", async (e: KeyboardKeyEvent) => {
-        if (!binding) {
-            return;
-        }
-
-        binding = false;
-
-        if (e.keyCode !== 256) {
-            cSetting.value = e.keyCode;
-        } else {
-            cSetting.value = -1;
-        }
-        await updatePrintableKeyName();
-
-        setting = {...cSetting};
-
-        dispatch("change");
-    });
 
     async function toggleBinding() {
         if (binding) {
-            cSetting.value = -1;
-            await updatePrintableKeyName();
+            cSetting.value = UNKNOWN_KEY;
         }
 
         binding = !binding;
@@ -53,17 +38,60 @@
         dispatch("change");
     }
 
-    onMount(async () => {
-        await updatePrintableKeyName();
+    listen("keyboardKey", async (e: KeyboardKeyEvent) => {
+        if (e.screen === undefined || !e.screen.class.startsWith("net.ccbluex.liquidbounce") ||
+            !(e.screen.title === "ClickGUI" || e.screen.title === "VS-CLICKGUI")) {
+            return;
+        }
+
+        if (!binding) {
+            return;
+        }
+
+        binding = false;
+
+        if (e.keyCode !== 256) {
+            cSetting.value = e.key;
+        } else {
+            cSetting.value = UNKNOWN_KEY;
+        }
+
+        setting = {...cSetting};
+
+        dispatch("change");
     });
+
+    listen("mouseButton", async (e: MouseButtonEvent) => {
+        if (e.screen === undefined || !e.screen.class.startsWith("net.ccbluex.liquidbounce") ||
+            !(e.screen.title === "ClickGUI" || e.screen.title === "VS-CLICKGUI")) {
+            return;
+        }
+
+        if (!binding || (e.button === 0 && isHovered)) {
+            return;
+        }
+
+        binding = false;
+
+        cSetting.value = e.key;
+
+        setting = {...cSetting};
+
+        dispatch("change");
+    })
 </script>
 
 <div class="setting">
-    <button class="change-bind" on:click={toggleBinding}>
+    <button
+            class="change-bind"
+            on:click={toggleBinding}
+            on:mouseenter={() => isHovered = true}
+            on:mouseleave={() => isHovered = false}
+    >
         {#if !binding}
-            <div class="name">{cSetting.name}:</div>
-            
-            {#if cSetting.value === -1}
+            <div class="name">{$spaceSeperatedNames ? convertToSpacedString(cSetting.name) : cSetting.name}:</div>
+
+            {#if cSetting.value === UNKNOWN_KEY}
                 <span class="none">None</span>
             {:else}
                 <span>{printableKeyName}</span>
@@ -75,10 +103,10 @@
 </div>
 
 <style lang="scss">
-  @import "../../../colors.scss";
+  @use "../../../colors.scss" as *;
 
   .setting {
-    padding: 7px 0px;
+    padding: 7px 0;
   }
 
   .change-bind {
@@ -86,7 +114,7 @@
     border: solid 2px $accent-color;
     border-radius: 3px;
     cursor: pointer;
-    padding: 5px;
+    padding: 4px;
     font-weight: 500;
     color: $clickgui-text-color;
     font-size: 12px;

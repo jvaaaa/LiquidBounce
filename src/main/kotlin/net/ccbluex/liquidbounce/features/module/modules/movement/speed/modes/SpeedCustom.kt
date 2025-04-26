@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015 - 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,23 +18,20 @@
  */
 package net.ccbluex.liquidbounce.features.module.modules.movement.speed.modes
 
-import net.ccbluex.liquidbounce.config.Choice
-import net.ccbluex.liquidbounce.config.ChoiceConfigurable
-import net.ccbluex.liquidbounce.config.ToggleableConfigurable
-import net.ccbluex.liquidbounce.event.events.MovementInputEvent
+import net.ccbluex.liquidbounce.config.types.ChoiceConfigurable
+import net.ccbluex.liquidbounce.config.types.ToggleableConfigurable
+import net.ccbluex.liquidbounce.event.EventListener
 import net.ccbluex.liquidbounce.event.events.PacketEvent
 import net.ccbluex.liquidbounce.event.events.PlayerAfterJumpEvent
 import net.ccbluex.liquidbounce.event.events.PlayerJumpEvent
 import net.ccbluex.liquidbounce.event.handler
-import net.ccbluex.liquidbounce.event.repeatable
 import net.ccbluex.liquidbounce.event.sequenceHandler
-import net.ccbluex.liquidbounce.features.module.modules.combat.ModuleCriticals
+import net.ccbluex.liquidbounce.event.tickHandler
 import net.ccbluex.liquidbounce.features.module.modules.movement.speed.ModuleSpeed
-import net.ccbluex.liquidbounce.features.module.modules.movement.speed.SpeedAntiCornerBump
 import net.ccbluex.liquidbounce.utils.client.Timer
 import net.ccbluex.liquidbounce.utils.entity.moving
 import net.ccbluex.liquidbounce.utils.entity.sqrtSpeed
-import net.ccbluex.liquidbounce.utils.entity.strafe
+import net.ccbluex.liquidbounce.utils.entity.withStrafe
 import net.ccbluex.liquidbounce.utils.kotlin.Priority
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket
 
@@ -53,12 +50,10 @@ import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket
  * - Avoid edge bump
  *
  */
-object SpeedCustom : Choice("Custom") {
+class SpeedCustom(override val parent: ChoiceConfigurable<*>) : SpeedBHopBase("Custom", parent) {
 
-    override val parent: ChoiceConfigurable<Choice>
-        get() = ModuleSpeed.modes
-
-    private object HorizontalModification : ToggleableConfigurable(ModuleSpeed, "HorizontalModification", true) {
+    private class HorizontalModification(parent: EventListener?) : ToggleableConfigurable(parent,
+        "HorizontalModification", true) {
 
         private val horizontalAcceleration by float("HorizontalAcceleration", 0f, -0.1f..0.2f)
         private val horizontalJumpOffModifier by float("HorizontalJumpOff", 0f, -0.5f..1f)
@@ -68,9 +63,10 @@ object SpeedCustom : Choice("Custom") {
          */
         private val ticksToBoostOff by int("TicksToBoostOff", 0, 0..20, "ticks")
 
-        val repeatable = repeatable {
+        @Suppress("unused")
+        private val tickHandler = tickHandler {
             if (!player.moving) {
-                return@repeatable
+                return@tickHandler
             }
 
             if (horizontalAcceleration != 0f) {
@@ -79,7 +75,8 @@ object SpeedCustom : Choice("Custom") {
             }
         }
 
-        val onJump = sequenceHandler<PlayerAfterJumpEvent> {
+        @Suppress("unused")
+        private val jumpHandler = sequenceHandler<PlayerAfterJumpEvent> {
             if (horizontalJumpOffModifier != 0f) {
                 waitTicks(ticksToBoostOff)
 
@@ -88,39 +85,36 @@ object SpeedCustom : Choice("Custom") {
             }
         }
 
-        // todo: apply this as fix for boxed toggleables
-        override fun handleEvents() = super.handleEvents() && SpeedCustom.isActive
-
     }
 
-    private object VerticalModification : ToggleableConfigurable(ModuleSpeed, "VerticalModification", false) {
+    private class VerticalModification(parent: EventListener?) : ToggleableConfigurable(parent,
+        "VerticalModification", true) {
 
         private val jumpHeight by float("JumpHeight", 0.42f, 0.0f..3f)
 
         private val pullDown by float("Pulldown", 0f, 0f..1f)
         private val pullDownDuringFall by float("PullDownDuringFall", 0f, 0f..1f)
 
-        val repeatable = repeatable {
+        @Suppress("unused")
+        private val tickHandler = tickHandler {
             if (!player.moving) {
-                return@repeatable
+                return@tickHandler
             }
 
             val pullDown = if (player.velocity.y <= 0.0) pullDownDuringFall else pullDown
             player.velocity.y -= pullDown
         }
 
-        val onJump = handler<PlayerJumpEvent> {
+        @Suppress("unused")
+        private val jumpHandler = handler<PlayerJumpEvent> { event ->
             if (jumpHeight != 0.42f) {
-                it.motion = jumpHeight
+                event.motion = jumpHeight
             }
         }
 
-        // todo: apply this as fix for boxed toggleables
-        override fun handleEvents() = super.handleEvents() && SpeedCustom.isActive
-
     }
 
-    private object Strafe : ToggleableConfigurable(ModuleSpeed, "Strafe", true) {
+    private class Strafe(parent: EventListener?) : ToggleableConfigurable(parent, "Strafe", true) {
 
         private val strength by float("Strength", 1f, 0.1f..1f)
 
@@ -132,26 +126,30 @@ object SpeedCustom : Choice("Custom") {
 
         private var ticksTimeout = 0
 
-        val repeatable = repeatable {
+        @Suppress("unused")
+        private val strafeHandler = tickHandler {
             if (ticksTimeout > 0) {
                 ticksTimeout--
-                return@repeatable
+                return@tickHandler
             }
 
             if (!player.moving) {
-                return@repeatable
+                return@tickHandler
             }
 
             when {
-                customSpeed -> player.strafe(speed = speed.toDouble(), strength = strength.toDouble())
-                else -> player.strafe(strength = strength.toDouble())
+                customSpeed -> player.velocity =
+                        player.velocity.withStrafe(speed = speed.toDouble(), strength = strength.toDouble())
+                else ->
+                    player.velocity = player.velocity.withStrafe(strength = strength.toDouble())
             }
         }
 
-        val packetHandler = sequenceHandler<PacketEvent> {
+        @Suppress("unused")
+        private val packetHandler = sequenceHandler<PacketEvent> {
             val packet = it.packet
 
-            if (packet is EntityVelocityUpdateS2CPacket && packet.id == player.id) {
+            if (packet is EntityVelocityUpdateS2CPacket && packet.entityId == player.id) {
                 val velocityX = packet.velocityX / 8000.0
                 val velocityY = packet.velocityY / 8000.0
                 val velocityZ = packet.velocityZ / 8000.0
@@ -167,58 +165,33 @@ object SpeedCustom : Choice("Custom") {
                     } else {
                         player.sqrtSpeed
                     }
-                    player.strafe(speed = speed)
+                    player.velocity = player.velocity.withStrafe(speed = speed)
                 }
             }
         }
 
-        // todo: apply this as fix for boxed toggleables
-        override fun handleEvents() = super.handleEvents() && SpeedCustom.isActive
-
     }
 
     init {
-        tree(HorizontalModification)
-        tree(VerticalModification)
+        tree(HorizontalModification(this))
+        tree(VerticalModification(this))
     }
 
     private val timerSpeed by float("TimerSpeed", 1f, 0.1f..10f)
 
-    private val optimizeForCriticals by boolean("OptimizeForCriticals", true)
-    private val avoidEdgeBump by boolean("AvoidEdgeBump", true)
-
     init {
-        tree(Strafe)
+        tree(Strafe(this))
     }
 
-    val repeatable = repeatable {
+    @Suppress("unused")
+    private val tickHandler = tickHandler {
         if (!player.moving) {
-            return@repeatable
+            return@tickHandler
         }
 
         if (timerSpeed != 1f) {
             Timer.requestTimerSpeed(timerSpeed, Priority.IMPORTANT_FOR_USAGE_1, ModuleSpeed)
         }
-    }
-
-    val handleJump = handler<MovementInputEvent> {
-        if (!player.moving || doOptimizationsPreventJump()) {
-            return@handler
-        }
-
-        it.jumping = true
-    }
-
-    private fun doOptimizationsPreventJump(): Boolean {
-        if (optimizeForCriticals && ModuleCriticals.shouldWaitForJump(0.42f)) {
-            return true
-        }
-
-        if (avoidEdgeBump && SpeedAntiCornerBump.shouldDelayJump()) {
-            return true
-        }
-
-        return false
     }
 
 }

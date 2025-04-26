@@ -1,12 +1,29 @@
+/*
+ * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
+ *
+ * Copyright (c) 2015 - 2025 CCBlueX
+ *
+ * LiquidBounce is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * LiquidBounce is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with LiquidBounce. If not, see <https://www.gnu.org/licenses/>.
+ */
 package net.ccbluex.liquidbounce.features.module.modules.world.scaffold.features
 
-import net.ccbluex.liquidbounce.config.ToggleableConfigurable
+import net.ccbluex.liquidbounce.LiquidBounce.logger
+import net.ccbluex.liquidbounce.config.types.ToggleableConfigurable
 import net.ccbluex.liquidbounce.features.module.modules.world.scaffold.ModuleScaffold
 import net.ccbluex.liquidbounce.utils.entity.isCloseToEdge
+import net.ccbluex.liquidbounce.utils.math.*
 import net.ccbluex.liquidbounce.utils.math.geometry.Line
-import net.ccbluex.liquidbounce.utils.math.minus
-import net.ccbluex.liquidbounce.utils.math.plus
-import net.ccbluex.liquidbounce.utils.math.times
 import net.ccbluex.liquidbounce.utils.movement.DirectionalInput
 import net.ccbluex.liquidbounce.utils.movement.findEdgeCollision
 import net.minecraft.util.math.Vec3d
@@ -36,7 +53,7 @@ object ScaffoldMovementPrediction : ToggleableConfigurable(ModuleScaffold, "Pred
         val x = getAvgPlacementPos()
 
         if (x != null) {
-            println(x.distanceTo(unrotatedOffset))
+            logger.debug(x.distanceTo(unrotatedOffset))
         }
 
         lastPlacementOffsets.addLast(unrotatedOffset)
@@ -51,7 +68,7 @@ object ScaffoldMovementPrediction : ToggleableConfigurable(ModuleScaffold, "Pred
             return null
         }
 
-        return lastPlacementOffsets.reduce { acc, vec3d -> acc + vec3d }.multiply(1.0 / lastPlacementOffsets.size)
+        return lastPlacementOffsets.average()
     }
 
     /**
@@ -67,8 +84,9 @@ object ScaffoldMovementPrediction : ToggleableConfigurable(ModuleScaffold, "Pred
         val optimalEdgeDist = 0.0
 
         // When we are close to the edge, we are able to place right now. Thus, we don't want to use a future position
-        if (player.isCloseToEdge(DirectionalInput(player.input), distance = optimalEdgeDist))
+        if (player.isCloseToEdge(DirectionalInput(player.input), distance = optimalEdgeDist)) {
             return null
+        }
 
         // If the next placement point is far in the future. Don't predict for now
         val fallOffPoint = getFallOffPositionOnLine(optimalLine) ?: return null
@@ -98,12 +116,12 @@ object ScaffoldMovementPrediction : ToggleableConfigurable(ModuleScaffold, "Pred
 
         val nearestPosToPlayer = optimalLine.getNearestPointTo(player.pos)
 
-        val fromLine = nearestPosToPlayer + Vec3d(0.0, -0.1, 0.0)
+        val fromLine = nearestPosToPlayer.add(0.0, -0.1, 0.0)
         val toLine = fromLine + optimalLine.direction.normalize().multiply(3.0)
 
         val edgeCollision = findEdgeCollision(fromLine, toLine) ?: return null
 
-        val fallOffPoint = Vec3d(edgeCollision.x, player.pos.y, edgeCollision.z)
+        val fallOffPoint = edgeCollision.copy(y = player.y)
 
         return fallOffPoint
     }

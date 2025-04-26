@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -21,40 +21,63 @@
 
 package net.ccbluex.liquidbounce.features.module.modules.movement.fly.modes
 
-import net.ccbluex.liquidbounce.config.Choice
-import net.ccbluex.liquidbounce.config.ChoiceConfigurable
+import net.ccbluex.liquidbounce.config.types.Choice
+import net.ccbluex.liquidbounce.config.types.ChoiceConfigurable
+import net.ccbluex.liquidbounce.config.types.Configurable
+import net.ccbluex.liquidbounce.config.types.ToggleableConfigurable
 import net.ccbluex.liquidbounce.event.events.BlockShapeEvent
 import net.ccbluex.liquidbounce.event.events.PacketEvent
 import net.ccbluex.liquidbounce.event.events.PlayerJumpEvent
 import net.ccbluex.liquidbounce.event.handler
-import net.ccbluex.liquidbounce.event.repeatable
 import net.ccbluex.liquidbounce.event.sequenceHandler
+import net.ccbluex.liquidbounce.event.tickHandler
 import net.ccbluex.liquidbounce.features.module.modules.movement.fly.ModuleFly
+import net.ccbluex.liquidbounce.utils.client.MovePacketType
 import net.ccbluex.liquidbounce.utils.client.chat
-import net.ccbluex.liquidbounce.utils.entity.strafe
+import net.ccbluex.liquidbounce.utils.entity.withStrafe
 import net.minecraft.block.FluidBlock
 import net.minecraft.network.packet.c2s.play.PlayerMoveC2SPacket
 import net.minecraft.network.packet.s2c.play.EntityVelocityUpdateS2CPacket
 import net.minecraft.network.packet.s2c.play.ExplosionS2CPacket
 import net.minecraft.util.shape.VoxelShapes
+import kotlin.jvm.optionals.getOrNull
 
 internal object FlyVanilla : Choice("Vanilla") {
 
-    val horizontalSpeed by float("Horizontal", 0.44f, 0.1f..5f)
-    val verticalSpeed by float("Vertical", 0.44f, 0.1f..5f)
+    private val glide by float("Glide", 0.0f, -1f..1f)
 
-    val glide by float("Glide", 0.0f, -1f..1f)
+    private val bypassVanillaCheck by boolean("BypassVanillaCheck", true)
 
-    val bypassVanillaCheck by boolean("BypassVanillaCheck", true)
+    object BaseSpeed : Configurable("BaseSpeed") {
+        val horizontalSpeed by float("Horizontal", 0.44f, 0.1f..10f)
+        val verticalSpeed by float("Vertical", 0.44f, 0.1f..10f)
+    }
+
+    object SprintSpeed : ToggleableConfigurable(this, "SprintSpeed", true) {
+        val horizontalSpeed by float("Horizontal", 1f, 0.1f..10f)
+        val verticalSpeed by float("Vertical", 1f, 0.1f..10f)
+    }
+
+    init {
+        tree(BaseSpeed)
+        tree(SprintSpeed)
+    }
 
     override val parent: ChoiceConfigurable<*>
         get() = ModuleFly.modes
 
-    val repeatable = repeatable {
-        player.strafe(speed = horizontalSpeed.toDouble())
+    @Suppress("unused")
+    private val tickHandler = tickHandler {
+        val useSprintSpeed = mc.options.sprintKey.isPressed && SprintSpeed.enabled
+        val hSpeed =
+            if (useSprintSpeed) SprintSpeed.horizontalSpeed else BaseSpeed.horizontalSpeed
+        val vSpeed =
+            if (useSprintSpeed) SprintSpeed.verticalSpeed else BaseSpeed.verticalSpeed
+
+        player.velocity = player.velocity.withStrafe(speed = hSpeed.toDouble())
         player.velocity.y = when {
-            player.input.jumping -> verticalSpeed.toDouble()
-            player.input.sneaking -> (-verticalSpeed).toDouble()
+            mc.options.jumpKey.isPressed -> vSpeed.toDouble()
+            mc.options.sneakKey.isPressed -> (-vSpeed).toDouble()
             else -> glide.toDouble()
         }
 
@@ -65,6 +88,71 @@ internal object FlyVanilla : Choice("Vanilla") {
             player.velocity.y = -0.04
             waitTicks(1)
         }
+    }
+
+}
+
+internal object FlyCreative : Choice("Creative") {
+
+    override val parent: ChoiceConfigurable<*>
+        get() = ModuleFly.modes
+
+    private val speed by float("Speed", 0.1f, 0.1f..5f)
+
+    private object SprintSpeed : ToggleableConfigurable(this, "SprintSpeed", true) {
+        val speed by float("Speed", 0.1f, 0.1f..5f)
+    }
+
+    init {
+        tree(SprintSpeed)
+    }
+
+    private val maxVelocity by float("MaxVelocity", 4f, 1f..20f)
+
+    private val bypassVanillaCheck by boolean("BypassVanillaCheck", true)
+
+    private val forceFlight by boolean("ForceFlight", true)
+
+    override fun enable() {
+        player.abilities.allowFlying = true
+    }
+
+    private fun shouldFlyDown(): Boolean {
+        if (!bypassVanillaCheck) return false
+        if (player.age % 40 != 0) return false
+
+        // check if the player is above a block or in mid-air
+        // if the player is right above a block, we don't need to fly down
+        if (world.getStatesInBox(player.boundingBox.offset(0.0, -0.55, 0.0)).anyMatch { !it.isAir }) return false
+
+        return true
+    }
+
+    val repeatable = tickHandler {
+        player.abilities.flySpeed =
+            if (mc.options.sprintKey.isPressed && SprintSpeed.enabled) SprintSpeed.speed else speed
+
+        if (forceFlight) player.abilities.flying = true
+
+        if (player.velocity.lengthSquared() > maxVelocity * maxVelocity) {
+            player.velocity = player.velocity.normalize().multiply(maxVelocity.toDouble())
+        }
+
+        if (shouldFlyDown()) {
+            network.sendPacket(MovePacketType.POSITION_AND_ON_GROUND.generatePacket())
+        }
+
+    }
+
+    val packetHandler = handler<PacketEvent> { event ->
+        if (shouldFlyDown() && event.packet is PlayerMoveC2SPacket) {
+            event.packet.y = player.lastBaseY - 0.04
+        }
+    }
+
+    override fun disable() {
+        player.abilities.allowFlying = false
+        player.abilities.flying = false
     }
 
 }
@@ -116,10 +204,10 @@ internal object FlyExplosion : Choice("Explosion") {
         super.enable()
     }
 
-    val repeatable = repeatable {
+    val repeatable = tickHandler {
         if (strafeSince > 0) {
             if (!player.isOnGround) {
-                player.strafe(speed = strafeSince.toDouble())
+                player.velocity = player.velocity.withStrafe(speed = strafeSince.toDouble())
                 strafeSince -= strafeDecrease
             } else {
                 strafeSince = 0f
@@ -131,7 +219,7 @@ internal object FlyExplosion : Choice("Explosion") {
         val packet = event.packet
 
         // Check if this is a regular velocity update
-        if (packet is EntityVelocityUpdateS2CPacket && packet.id == player.id) {
+        if (packet is EntityVelocityUpdateS2CPacket && packet.entityId == player.id) {
             // Modify packet according to the specified values
             packet.velocityX = 0
             packet.velocityY = (packet.velocityY * vertical).toInt()
@@ -140,12 +228,14 @@ internal object FlyExplosion : Choice("Explosion") {
             waitTicks(1)
             strafeSince = startStrafe
         } else if (packet is ExplosionS2CPacket) { // Check if explosion affects velocity
-            packet.playerVelocityX = 0f
-            packet.playerVelocityY *= vertical
-            packet.playerVelocityZ = 0f
+            packet.playerKnockback.getOrNull()?.let { knockback ->
+                knockback.x = 0.0
+                knockback.y *= vertical
+                knockback.z = 0.0
 
-            waitTicks(1)
-            strafeSince = startStrafe
+                waitTicks(1)
+                strafeSince = startStrafe
+            }
         }
     }
 
@@ -156,8 +246,8 @@ internal object FlyJetpack : Choice("Jetpack") {
     override val parent: ChoiceConfigurable<*>
         get() = ModuleFly.modes
 
-    val repeatable = repeatable {
-        if (player.input.jumping) {
+    val repeatable = tickHandler {
+        if (player.input.playerInput.jump) {
             player.velocity.x *= 1.1
             player.velocity.y += 0.15
             player.velocity.z *= 1.1

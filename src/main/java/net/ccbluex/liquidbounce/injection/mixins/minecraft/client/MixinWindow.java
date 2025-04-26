@@ -1,7 +1,7 @@
 /*
  * This file is part of LiquidBounce (https://github.com/CCBlueX/LiquidBounce)
  *
- * Copyright (c) 2015 - 2024 CCBlueX
+ * Copyright (c) 2015 - 2025 CCBlueX
  *
  * LiquidBounce is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -16,11 +16,11 @@
  * You should have received a copy of the GNU General Public License
  * along with LiquidBounce. If not, see <https://www.gnu.org/licenses/>.
  */
-
 package net.ccbluex.liquidbounce.injection.mixins.minecraft.client;
 
 import net.ccbluex.liquidbounce.LiquidBounce;
 import net.ccbluex.liquidbounce.event.EventManager;
+import net.ccbluex.liquidbounce.event.events.FrameBufferResizeEvent;
 import net.ccbluex.liquidbounce.event.events.ScaleFactorChangeEvent;
 import net.ccbluex.liquidbounce.event.events.WindowResizeEvent;
 import net.ccbluex.liquidbounce.features.misc.HideAppearance;
@@ -28,13 +28,11 @@ import net.minecraft.client.util.Icons;
 import net.minecraft.client.util.Window;
 import net.minecraft.resource.InputSupplier;
 import net.minecraft.resource.ResourcePack;
-import org.lwjgl.glfw.GLFW;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
@@ -48,17 +46,6 @@ public class MixinWindow {
     @Shadow
     @Final
     private long handle;
-
-    @Redirect(method = "<init>", at = @At(value = "INVOKE", target = "Lorg/lwjgl/glfw/GLFW;glfwWindowHint(II)V"))
-    private void hookOpenGl33(int hint, int value) {
-        if (hint == GLFW.GLFW_CONTEXT_VERSION_MAJOR) {
-            GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MAJOR, 3);
-        } else if (hint == GLFW.GLFW_CONTEXT_VERSION_MINOR) {
-            GLFW.glfwWindowHint(GLFW.GLFW_CONTEXT_VERSION_MINOR, 3);
-        } else {
-            GLFW.glfwWindowHint(hint, value);
-        }
-    }
 
     /**
      * Set the window icon to our client icon.
@@ -74,8 +61,8 @@ public class MixinWindow {
         LiquidBounce.INSTANCE.getLogger().debug("Loading client icons");
 
         // Find client icons
-        final InputStream stream16 = LiquidBounce.class.getResourceAsStream("/assets/liquidbounce/icon_16x16.png");
-        final InputStream stream32 = LiquidBounce.class.getResourceAsStream("/assets/liquidbounce/icon_32x32.png");
+        final InputStream stream16 = LiquidBounce.class.getResourceAsStream("/resources/liquidbounce/icon_16x16.png");
+        final InputStream stream32 = LiquidBounce.class.getResourceAsStream("/resources/liquidbounce/icon_32x32.png");
 
         // In case one of the icons was not found
         if (stream16 == null || stream32 == null) {
@@ -98,21 +85,11 @@ public class MixinWindow {
         }
     }
 
-    /**
-     * Hook GUI scale adjustment
-     * <p>
-     * This is used to set the default GUI scale to 2X on AUTO because the default is TOO HUGE.
-     * On WQHD and HD displays, the default GUI scale is way too big. 4K might be fine, but
-     * the majority of players are not using 4K displays.
-     */
-    @ModifyVariable(method = "calculateScaleFactor", at = @At("HEAD"), index = 1, argsOnly = true)
-    public int hookGuiScale(int guiScale) {
-        // Default AUTO gui scale to 2X
-        if (guiScale == 0) {
-            return 2;
+    @Inject(method = "onFramebufferSizeChanged", at = @At("RETURN"))
+    public void hookFramebufferResize(long window, int width, int height, CallbackInfo callbackInfo) {
+        if (window == handle) {
+            EventManager.INSTANCE.callEvent(new FrameBufferResizeEvent(width, height));
         }
-
-        return guiScale;
     }
 
     @Inject(method = "setScaleFactor", at = @At("RETURN"))

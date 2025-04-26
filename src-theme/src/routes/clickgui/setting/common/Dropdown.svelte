@@ -1,7 +1,8 @@
 <script lang="ts">
     import {createEventDispatcher} from "svelte";
+    import {convertToSpacedString, spaceSeperatedNames} from "../../../../theme/theme_config";
 
-    export let name: string;
+    export let name: string | null;
     export let options: string[];
     export let value: string;
 
@@ -27,7 +28,12 @@
 <!-- svelte-ignore a11y-no-static-element-interactions -->
 <div class="dropdown" class:expanded on:click={() => (expanded = !expanded)}>
     <div class="head" bind:this={dropdownHead}>
-        <span class="text">{name} &bull; {value}</span>
+        {#if name !== null}
+            <span class="text">{$spaceSeperatedNames ? convertToSpacedString(name) : name}
+                &bull; {$spaceSeperatedNames ? convertToSpacedString(value) : value}</span>
+        {:else}
+            <span class="text">{$spaceSeperatedNames ? convertToSpacedString(value) : value}</span>
+        {/if}
     </div>
 
     {#if expanded}
@@ -38,7 +44,7 @@
                         class:active={o === value}
                         on:click={() => updateValue(o)}
                 >
-                    {o}
+                    {$spaceSeperatedNames ? convertToSpacedString(o) : o}
                 </div>
             {/each}
         </div>
@@ -46,7 +52,7 @@
 </div>
 
 <style lang="scss">
-  @import "../../../../colors.scss";
+  @use "../../../../colors.scss" as *;
 
   .dropdown {
     position: relative;
@@ -77,6 +83,10 @@
       font-weight: 500;
       color: $clickgui-text-color;
       font-size: 12px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      margin-right: 20px;
     }
 
     .text::after {
